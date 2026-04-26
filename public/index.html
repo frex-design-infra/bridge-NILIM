@@ -1172,6 +1172,7 @@ function renderDamageTable(b) {
   const span = b.spans[selSpan];
   if (!span) { document.getElementById('damage-table').innerHTML = '<tr><td style="padding:20px;color:#aaa">損傷データなし</td></tr>'; return; }
   const _showChanges = gyomuList.find(x => x.id === b.gyomuId)?.showChanges ?? false;
+  const _superMat    = getSuperMaterial(b.superStructure);
 
   // ⑬補修・補強材の損傷 チェックボックス描画
   const bi = selBridge;
@@ -1245,7 +1246,7 @@ function renderDamageTable(b) {
     // 部材番号
     html += `<td>${esc(String(m.number))}</td>`;
 
-    const naSet = getNACols(m.type);
+    const naSet = getNACols(m.type, _superMat);
 
     cols.slice(2, -1).forEach(c => {
       if (c.type === 'notes') return;
@@ -1867,17 +1868,42 @@ const NA_RULES = [
   // RC主桁・RC横桁等（⑥〜⑧◎、鋼材系①〜⑤・⑩外）
   { match: /RC主桁|RC横桁|RC桁/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 主桁・横桁・縦桁（材料未指定）→ 鋼桁として扱い、コンクリート系損傷もNA
-  //   ※ RC主桁/PC主桁は上位ルールで先にヒットするため影響なし
-  //   ※ 鋼部材にひびわれ漏水・鉄筋露出・PC定着部異常は存在しない
-  { match: /主桁|横桁|縦桁/,
+  // 主桁・横桁・縦桁（材料未指定）→ 上部構造形式から材料を判定して動的にNA切替（isGeneric フラグ）
+  //   鋼  → コンクリート系損傷NA   RC → 鋼系損傷NA   PC → 鋼系+床版ひびわれNA
+  //   ※ RC主桁/PC主桁/鋼主桁等は上位ルールで先にヒットするため影響なし
+  { match: /主桁|横桁|縦桁/, isGeneric: true,
     na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
 ];
 
-function getNACols(memberType) {
+// 上部構造形式から材料種別を判定
+function getSuperMaterial(superStructure) {
+  if (!superStructure) return '';
+  if (/^鋼/.test(superStructure))  return '鋼';
+  if (/^RC/.test(superStructure))  return 'RC';
+  if (/^PC/.test(superStructure))  return 'PC';
+  if (/^SRC/.test(superStructure)) return 'SRC'; // 鋼コンクリート合成：両方適用可
+  return '';
+}
+
+// 材料別 NAセット（汎用部材向け）
+const SUPER_MAT_NA = {
+  '鋼': new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']),
+  'RC': new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']),
+  'PC': new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','roadSurf','bearFunc','settlement','scour']),
+  // SRC: 両材料とも評価対象 → 共通外だけNA
+  'SRC': new Set(['fallOff','slabCrack','roadSurf','bearFunc','settlement','scour']),
+};
+
+function getNACols(memberType, superMat) {
   if (!memberType) return new Set();
   for (const rule of NA_RULES) {
-    if (rule.match.test(memberType)) return rule.na;
+    if (rule.match.test(memberType)) {
+      // 汎用部材かつ上部構造形式が判明していれば材料別NAで上書き
+      if (rule.isGeneric && superMat && SUPER_MAT_NA[superMat]) {
+        return SUPER_MAT_NA[superMat];
+      }
+      return rule.na;
+    }
   }
   return new Set();
 }
