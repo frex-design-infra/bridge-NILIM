@@ -721,13 +721,26 @@ function renderReview(b) {
     {label:'所在地（至）',  key:'locationTo'},
     {label:'管理者',        key:'manager'},
     {label:'架設年度',      key:'foundingYear'},
-    {label:'活荷重・等級',  key:'liveLoad'},
-    {label:'適用示方書',    key:'designCode'},
+    {label:'活荷重・等級',  key:'liveLoad', opts:[
+      'B活荷重','A活荷重','L活荷重','T-20（旧）','TT-43（旧）','P活荷重（歩道橋）']},
+    {label:'適用示方書',    key:'designCode', opts:[
+      '道路橋示方書（令和2年）','道路橋示方書（平成24年）','道路橋示方書（平成14年）',
+      '道路橋示方書（平成8年）','道路橋示方書（昭和55年）','道路橋示方書（昭和39年）',
+      '旧道路橋示方書（昭和24年以前）']},
     {label:'橋長',          key:'bridgeLength'},
     {label:'総径間数',      key:'totalSpans'},
-    {label:'上部構造形式',  key:'superStructure'},
-    {label:'下部構造形式',  key:'subStructure'},
-    {label:'基礎形式',      key:'foundationType'},
+    {label:'上部構造形式',  key:'superStructure', opts:[
+      '鋼I桁橋','鋼箱桁橋','鋼板桁橋','鋼トラス橋','鋼ラーメン橋','鋼アーチ橋','鋼斜張橋','鋼吊橋','鋼合成桁橋',
+      'PC単純T桁橋','PC連続T桁橋','PC単純箱桁橋','PC連続箱桁橋','PC斜張橋','PCラーメン橋',
+      'RC桁橋','RC床版橋','RCT桁橋','RCラーメン橋']},
+    {label:'下部構造形式',  key:'subStructure', opts:[
+      '重力式橋台','逆T式橋台','U型橋台','控え壁式橋台',
+      '柱式橋脚','壁式橋脚','ラーメン式橋脚','張り出し式橋脚']},
+    {label:'基礎形式',      key:'foundationType', opts:[
+      '直接基礎',
+      '杭基礎（鋼管杭）','杭基礎（RC杭）','杭基礎（PHC杭）',
+      '杭基礎（場所打ちコンクリート杭）','杭基礎（鋼管ソイルセメント）',
+      'ケーソン基礎（オープン）','ケーソン基礎（ニューマチック）','鋼管矢板基礎']},
     {label:'点検日',        key:'inspectionDate'},
     {label:'緯度',          key:'latitude'},
     {label:'経度',          key:'longitude'},
@@ -735,12 +748,13 @@ function renderReview(b) {
     {label:'緊急輸送路の指定', key:'emergencyRoute'},
     {label:'路下条件',      key:'underCondition'},
   ];
-  document.getElementById('form-shogen').innerHTML = fields.map((f,fi) => `
-    <div class="form-group">
-      <label>${f.label}</label>
-      <input type="text" value="${esc(b[f.key])}"
-        oninput="bridges[${selBridge}]['${f.key}']=this.value">
-    </div>`).join('');
+  document.getElementById('form-shogen').innerHTML = fields.map(f => {
+    const val = esc(b[f.key]);
+    const dl  = f.opts ? `<datalist id="dl-${f.key}">${f.opts.map(o=>`<option value="${o}">`).join('')}</datalist>` : '';
+    const inp = `<input type="text"${f.opts?` list="dl-${f.key}"`:''}
+        value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value">`;
+    return `<div class="form-group"><label>${f.label}</label>${inp}${dl}</div>`;
+  }).join('');
 
   // ---- 径間タブ ----
   const spanTabsEl = document.getElementById('span-tabs');
