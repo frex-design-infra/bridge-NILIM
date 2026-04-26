@@ -1830,7 +1830,8 @@ function fuzzyMatchOpts(val, opts) {
 //   共通（部材限定）: ⑪路面の凹凸 ⑫支承の機能障害 ⑬補修補強材の損傷 ⑭沈下移動傾斜 ⑮洗堀
 // ※ 補修補強材の損傷（⑬）は全部材に施工可能なため NA に含めない
 // ※ 主桁・横桁・縦桁は橋梁形式によって鋼/RC/PCが変わるため
-//    材料名が含まれない場合はルールなし（全列表示）
+//    鋼/RC/PCが明示されている場合は上位ルールでヒット済み
+//    材料名なしの場合は「鋼桁」として扱い、コンクリート系損傷をNAにする
 const NA_RULES = [
   // PC床版（⑥〜⑨・⑩◎、鋼材系①〜⑤外）
   { match: /PC床版|床版\(PC\)/,
@@ -1866,10 +1867,11 @@ const NA_RULES = [
   // RC主桁・RC横桁等（⑥〜⑧◎、鋼材系①〜⑤・⑩外）
   { match: /RC主桁|RC横桁|RC桁/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 主桁・横桁・縦桁（材料未指定）→ 路面凹凸・支承機能・沈下・洗堀・抜落・床版ひびわれは部材によらず対象外
-  //   ※ 鋼/RC/PC いずれの材料でも上部構造桁部材に抜け落ち・床版ひびわれは適用しない（床版のみ）
+  // 主桁・横桁・縦桁（材料未指定）→ 鋼桁として扱い、コンクリート系損傷もNA
+  //   ※ RC主桁/PC主桁は上位ルールで先にヒットするため影響なし
+  //   ※ 鋼部材にひびわれ漏水・鉄筋露出・PC定着部異常は存在しない
   { match: /主桁|横桁|縦桁/,
-    na: new Set(['fallOff','slabCrack','roadSurf','bearFunc','settlement','scour']) },
+    na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
 ];
 
 function getNACols(memberType) {
