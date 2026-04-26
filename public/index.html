@@ -730,6 +730,23 @@ function parseSpan(data, spanNum) {
     }
   }
 
+  // 支承: 全損傷列を bearFunc にシフト（要領準拠: 支承は機能障害のみ評価）
+  // 過年度点検で corrosion / antiCor 等が記録されていた場合、最悪値を bearFunc に引き継ぎ元列クリア
+  span.members.forEach(m => {
+    if (!/支承/.test(m.type)) return;
+    const shiftKeys = ['corrosion','crack','boltLoss','fracture','antiCor','concrete','steelExp','fallOff','slabCrack','pcAnchor'];
+    const gradeOrder = {e:5,d:4,c:3,b:2,'?':1,a:0};
+    const otherVals = shiftKeys.map(k => m.d[k]).filter(v => v && v !== 'a');
+    if (otherVals.length > 0 && (!m.d.bearFunc || m.d.bearFunc === 'a')) {
+      // 最悪値（e > d > c > b > ?）を bearFunc に設定
+      const worst = otherVals.reduce((best, v) =>
+        (gradeOrder[v]??-1) > (gradeOrder[best]??-1) ? v : best, otherVals[0]);
+      m.d.bearFunc = worst;
+    }
+    // NA 列はデータもクリア
+    [...shiftKeys, 'antiCorCls','concPat','roadSurf','settlement','scour'].forEach(k => { m.d[k] = null; });
+  });
+
   // 沈下移動傾斜・洗堀: 評価対象の部材で値が未設定 かつ 備考に関連語句がなければ デフォルト a
   // （実務上ほぼ a。備考に「沈下」「移動」「傾斜」「洗堀」があれば手動入力を促すため null 維持）
   span.members.forEach(m => {
@@ -1792,9 +1809,9 @@ const NA_RULES = [
   // 基礎・杭・フーチング（⑭沈下・⑮洗堀・⑬補修のみ対象）
   { match: /基礎|杭|フーチング/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc']) },
-  // 支承（⑫支承機能◎、腐食①・防食⑤は鋼製支承で適用するため残す）
+  // 支承（⑫支承機能障害のみ◎。過年度の鋼損傷①⑤はインポート時に bearFunc へシフト済み）
   { match: /支承/,
-    na: new Set(['crack','boltLoss','fracture','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','settlement','scour']) },
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','settlement','scour']) },
   // 路面・舗装（⑪路面凹凸のみ）
   { match: /路面|舗装|アスファルト/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','bearFunc','settlement','scour']) },
