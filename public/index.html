@@ -807,9 +807,8 @@ function parseSpan(data, spanNum) {
 // 旧12列 → 統一キー
 function mapOld(row) {
   const v    = x => { const s = String(x??'').trim(); return s===''||s==='無'||s==='―' ? null : s; };
-  const yn   = x => { const s = String(x??'').trim(); return s==='無'?'a': s==='有'?'?': v(x); };
-  // 支承の機能障害: 有→e / 無→a（a,eの2値で明確に判定できる）
-  const ynBear = x => { const s = String(x??'').trim(); return s==='無'?'a': s==='有'?'e': v(x); };
+  // a,eのみの2値評価: 有→e / 無→a で確定（⑦鉄筋露出 ⑧抜け落ち ⑩PC定着部 ⑪路面凹凸 ⑫支承機能障害）
+  const yn = x => { const s = String(x??'').trim(); return s==='無'?'a': s==='有'?'e': v(x); };
   return {
     corrosion  : v(row[2]),   crack      : v(row[3]),
     boltLoss   : v(row[4]),   fracture   : v(row[5]),
@@ -817,7 +816,7 @@ function mapOld(row) {
     concrete   : v(row[6]),   concPat    : v(row[7]),
     steelExp   : yn(row[8]),  fallOff    : yn(row[9]),
     slabCrack  : v(row[10]),  pcAnchor   : yn(row[11]),
-    roadSurf   : yn(row[12]), bearFunc   : ynBear(row[13]),
+    roadSurf   : yn(row[12]), bearFunc   : yn(row[13]),
     repairDmg  : null,        repairCls  : null,    // 旧様式にない
     settlement : v(row[14]),  scour      : null,    // ⑫下部工の変状→settlement
     _oldSubWork: row[14]!==null && row[14]!=='' && String(row[14]||'').trim()!=='無',
