@@ -970,8 +970,7 @@ function refreshExportSummary() {
     el.innerHTML = '<div class="alert alert-warn">インポートされた橋梁データがありません。</div>';
     return;
   }
-  const tplWarn = templateWB ? '' : '<div class="alert alert-warn" style="margin-bottom:10px">テンプレが未設定です。セットアップタブで template.xlsx を読み込んでください（未設定の場合は基本形式で出力）。</div>';
-  el.innerHTML = tplWarn + `
+  el.innerHTML = `
     <div class="alert alert-info"><strong>${bridges.length}橋</strong>をエクスポートします。</div>
     <div class="bridge-list">
       ${bridges.map((b,i) => `
