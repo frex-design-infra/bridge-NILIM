@@ -1807,7 +1807,7 @@ const NA_RULES = [
   // 下部工・橋台・橋脚・躯体（常にRC: ⑥〜⑧・⑭・⑮◎、鋼材系①〜⑤外）
   // ※ テンプレートの部材種別は「下部工」で記載（橋台・橋脚は番号で区別）
   { match: /下部工|橋台|橋脚|躯体/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc']) },
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc']) },
   // 基礎・杭・フーチング（⑭沈下・⑮洗堀・⑬補修のみ対象）
   { match: /基礎|杭|フーチング/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc']) },
@@ -1828,14 +1828,14 @@ const NA_RULES = [
     na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
   // PC主桁・PC横桁等（⑥〜⑧・⑩◎、鋼材系①〜⑤外）
   { match: /PC主桁|PC横桁|PC桁/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','roadSurf','bearFunc','settlement','scour']) },
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','roadSurf','bearFunc','settlement','scour']) },
   // RC主桁・RC横桁等（⑥〜⑧◎、鋼材系①〜⑤・⑩外）
   { match: /RC主桁|RC横桁|RC桁/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 主桁・横桁・縦桁（材料未指定）→ 路面凹凸・支承機能・沈下・洗堀は部材によらず対象外
-  //   ※ 鋼/RC/PC いずれの材料でも上部構造部材にこれらの損傷は適用しない
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
+  // 主桁・横桁・縦桁（材料未指定）→ 路面凹凸・支承機能・沈下・洗堀・抜落・床版ひびわれは部材によらず対象外
+  //   ※ 鋼/RC/PC いずれの材料でも上部構造桁部材に抜け落ち・床版ひびわれは適用しない（床版のみ）
   { match: /主桁|横桁|縦桁/,
-    na: new Set(['roadSurf','bearFunc','settlement','scour']) },
+    na: new Set(['fallOff','slabCrack','roadSurf','bearFunc','settlement','scour']) },
 ];
 
 function getNACols(memberType) {
