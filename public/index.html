@@ -93,6 +93,13 @@ td.notes-col input { text-align: left; }
 .si-warn { background: #fff3e0; color: #bf360c; }
 .si-err { background: #ffebee; color: #c62828; }
 
+/* トースト通知 */
+#toast-container { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; align-items:center; gap:8px; pointer-events:none; }
+.toast { background:#1e3a5f; color:white; padding:11px 22px; border-radius:8px; font-size:13px; font-weight:600; box-shadow:0 4px 16px rgba(0,0,0,0.25); opacity:0; transform:translateY(12px); transition:opacity 0.25s, transform 0.25s; white-space:nowrap; }
+.toast.show { opacity:1; transform:translateY(0); }
+.toast.success { background:#1e6b3e; }
+.toast.error { background:#c62828; }
+
 /* サムネイル */
 .thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 12px; }
 .thumb { position: relative; aspect-ratio: 4/3; overflow: hidden; border-radius: 5px; border: 2px solid #dce0e8; background: #f0f2f5; }
@@ -207,6 +214,8 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
 </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
 
 <header>
   <h1>国総研調書作成ツール</h1>
@@ -508,9 +517,24 @@ function handleGyomuDrop(e, gyomuId) {
   handleGyomuFiles(e.dataTransfer.files, gyomuId);
 }
 
+function showToast(msg, type='', duration=3000) {
+  const container = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' '+type : '');
+  el.textContent = msg;
+  container.appendChild(el);
+  requestAnimationFrame(() => { requestAnimationFrame(() => { el.classList.add('show'); }); });
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
 function handleGyomuFiles(files, gyomuId) {
-  Array.from(files).forEach(file => {
-    if (!file.name.match(/\.xlsx?$/i)) return;
+  const xlsFiles = Array.from(files).filter(f => f.name.match(/\.xlsx?$/i));
+  if (!xlsFiles.length) return;
+  let done = 0, success = 0, errors = [];
+  xlsFiles.forEach(file => {
     const reader = new FileReader();
     reader.onload = ev => {
       try {
@@ -520,13 +544,18 @@ function handleGyomuFiles(files, gyomuId) {
         // インポート時の評価値を保存（業務毎の「変更赤字」比較用）
         bridge.spans.forEach(sp => sp.members.forEach(m => { m.d_orig = Object.assign({}, m.d); }));
         bridges.push(bridge);
+        success++;
+      } catch(err) {
+        errors.push(file.name);
+      }
+      done++;
+      if (done === xlsFiles.length) {
         renderGyomuCards();
-        // 確認・写真タブが開いていればサイドバーも更新
         ['review','photos'].forEach(t => {
           if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
         });
-      } catch(err) {
-        alert(`読込エラー: ${file.name}\n${err.message}`);
+        if (success > 0) showToast(`✅ ${success}橋をインポートしました`, 'success');
+        errors.forEach(name => showToast(`❌ 読込エラー: ${name}`, 'error', 5000));
       }
     };
     reader.readAsArrayBuffer(file);
