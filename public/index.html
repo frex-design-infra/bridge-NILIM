@@ -700,6 +700,33 @@ function parseSpan(data, spanNum) {
     });
   }
 
+  // 路面行がインポートデータにない場合、支承の直後にデフォルト追加（路面凹凸 = a）
+  const hasRoadRow = span.members.some(m => /路面|舗装|アスファルト/.test(m.type));
+  if (!hasRoadRow) {
+    const roadMember = {
+      type  : '路面',
+      number: 1,
+      d     : {
+        corrosion:null, crack:null, boltLoss:null, fracture:null,
+        antiCor:null,   antiCorCls:null,
+        concrete:null,  concPat:null, steelExp:null, fallOff:null,
+        slabCrack:null, pcAnchor:null,
+        roadSurf: 'a',  // デフォルト a（路面凹凸のみ評価対象）
+        bearFunc:null,  repairDmg:null, repairCls:null,
+        settlement:null, scour:null,
+        _oldSubWork:false, _hasYuHari:false
+      },
+      notes: ''
+    };
+    // 最後の支承行の直後に挿入、支承がなければ末尾に追加
+    const lastBearIdx = span.members.reduce((last, m, i) => /支承/.test(m.type) ? i : last, -1);
+    if (lastBearIdx >= 0) {
+      span.members.splice(lastBearIdx + 1, 0, roadMember);
+    } else {
+      span.members.push(roadMember);
+    }
+  }
+
   return span;
 }
 
@@ -1692,8 +1719,10 @@ const NA_RULES = [
   // RC主桁・RC横桁等（⑥〜⑧◎、鋼材系①〜⑤・⑩外）
   { match: /RC主桁|RC横桁|RC桁/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // ※ 主桁・横桁・縦桁（材料未指定）→ ルールなし・全列表示
-  //    橋梁形式によって鋼/RC/PCが変わるため材料が特定できない
+  // 主桁・横桁・縦桁（材料未指定）→ 路面凹凸・支承機能・沈下・洗堀は部材によらず対象外
+  //   ※ 鋼/RC/PC いずれの材料でも上部構造部材にこれらの損傷は適用しない
+  { match: /主桁|横桁|縦桁/,
+    na: new Set(['roadSurf','bearFunc','settlement','scour']) },
 ];
 
 function getNACols(memberType) {
