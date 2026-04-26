@@ -733,11 +733,31 @@ function renderReview(b) {
     {label:'管理者',        key:'manager'},
     {label:'架設年度',      key:'foundingYear'},
     {label:'活荷重・等級',  key:'liveLoad', opts:[
-      '不明','B活荷重','A活荷重','L活荷重','T-20（旧）','TT-43（旧）','P活荷重（歩道橋）']},
+      '不明',
+      'B活荷重・1等橋','B活荷重・2等橋','B活荷重・3等橋',
+      'A活荷重',
+      'P活荷重（歩道橋）',
+      'TT-43（昭和48年）',
+      'TL-20（昭和31年）','TL-14（昭和31年）','T-20,L-14（昭和31年）',
+      '13t（昭和14年）','9t（昭和14年）',
+      '12t（大正15年）','8t（大正15年）','6t（大正15年）',
+      'その他']},
     {label:'適用示方書',    key:'designCode', opts:[
-      '不明','道路橋示方書（令和2年）','道路橋示方書（平成24年）','道路橋示方書（平成14年）',
-      '道路橋示方書（平成8年）','道路橋示方書（昭和55年）','道路橋示方書（昭和39年）',
-      '旧道路橋示方書（昭和24年以前）']},
+      '不明',
+      '道路橋示方書（平成29年度）',
+      '道路橋示方書（平成24年度）',
+      '道路橋示方書（平成14年度）',
+      '道路橋示方書（平成8年度）',
+      '道路橋示方書（昭和55年）',
+      '道路橋示方書コンクリート編（昭和53年）',
+      '道路橋示方書（昭和47年）',
+      '鋼道路橋設計示方書改訂（昭和31年）',
+      '鋼道路橋設計示方書（昭和31年）',
+      '鋼道路橋設計示方書案（昭和14年）',
+      '道路構造に関する綱則案（大正15年）',
+      '鋼道路橋RC床版設計示方書（昭和42年）',
+      '特定路線に係る道路橋示方書（昭和48年）',
+      '示方書によらないもの（木橋等）']},
     {label:'橋長',          key:'bridgeLength'},
     {label:'総径間数',      key:'totalSpans'},
     {label:'上部構造形式',  key:'superStructure', opts:[
@@ -765,23 +785,38 @@ function renderReview(b) {
       '簡易H型鋼・H形鋼桁非合成','簡易H型鋼・H形鋼桁合成','簡易H型鋼・H形鋼桁不明',
       'その他・その他']},
     {label:'下部構造形式',  key:'subStructure', opts:[
-      '重力式橋台','逆T式橋台','U型橋台','控え壁式橋台',
-      '柱式橋脚','壁式橋脚','ラーメン式橋脚','張り出し式橋脚']},
+      '不明',
+      '橋台-重力式','橋台-半重力式','橋台-逆T式','橋台-控え壁式',
+      '橋台-ラーメン式','橋台-中抜き式','橋台-傾りこぼし式','橋台-小橋台',
+      '橋台-その他（多数）',
+      '橋脚-壁式（RC）','橋脚-壁式（SRC）','橋脚-壁式（鋼製）',
+      '橋脚-柱式（RC）','橋脚-柱式（SRC）','橋脚-柱式（鋼製）',
+      '橋脚-張り出し式（RC）','橋脚-張り出し式（SRC）','橋脚-張り出し式（鋼製）',
+      '橋脚-ラーメン式（RC）','橋脚-ラーメン式（SRC）','橋脚-ラーメン式（鋼製）',
+      '橋脚-その他（多数）']},
     {label:'基礎形式',      key:'foundationType', opts:[
-      '不明','直接基礎',
-      '杭基礎（鋼管杭）','杭基礎（RC杭）','杭基礎（PHC杭）',
-      '杭基礎（場所打ちコンクリート杭）','杭基礎（鋼管ソイルセメント）',
-      'ケーソン基礎（オープン）','ケーソン基礎（ニューマチック）','鋼管矢板基礎']},
+      '不明',
+      '直接基礎',
+      'オープンケーソン基礎',
+      'ニューマチックケーソン基礎',
+      '鋼管矢板基礎',
+      '場所打ちぐい基礎','深礎基礎',
+      '鋼管杭基礎','既製RC杭基礎','既製PC杭基礎',
+      '木ぐい基礎',
+      'その他（PCウェル・PHC・SC杭等）']},
     {label:'点検日',        key:'inspectionDate'},
     {label:'緯度',          key:'latitude'},
     {label:'経度',          key:'longitude'},
-    {label:'海岸からの距離', key:'coastalDistance', opts:[
-      '50m未満','50m以上100m未満','100m以上200m未満',
-      '200m以上500m未満','500m以上1000m未満','1000m以上']},
+    {label:'海岸からの距離(km)', key:'coastalDistance', opts:[
+      '不明',
+      '0.1未満',
+      '0.1以上0.2未満','0.2以上0.5未満','0.5以上1.0未満',
+      '1.0以上2.0未満','2.0以上5.0未満','5.0以上10.0未満',
+      '10.0以上20.0未満','20.0以上']},
     {label:'緊急輸送路の指定', key:'emergencyRoute', opts:[
-      '不明','第1次緊急輸送路','第2次緊急輸送路','第3次緊急輸送路','指定なし']},
+      '不明','一次','二次','三次','市町村指定','指定無し']},
     {label:'路下条件',      key:'underCondition', opts:[
-      '道路（一般道路）','道路（高速道路）','鉄道','河川','海・湖沼','その他','なし']},
+      '河川','湖沼','海洋','道路','鉄道','その他']},
   ];
   // インポート値をリストの最近似値に自動マッチ
   fields.filter(f => f.opts).forEach(f => {
@@ -828,27 +863,29 @@ function renderDamageTable(b) {
   if (!span) { document.getElementById('damage-table').innerHTML = '<tr><td style="padding:20px;color:#aaa">損傷データなし</td></tr>'; return; }
 
   // ヘッダー定義
+  // type:'grade'    = a〜e の5段階評価（要領p.6 表-3.1: ①腐食 ⑤防食機能 ⑥ひびわれ漏水 ⑨床版ひびわれ）
+  // type:'grade-ae' = a,e のみ（要領p.6 表-3.1: それ以外の11損傷種別）
   const cols = [
     {h:'部材種別',      type:'label'},
     {h:'No.',           type:'number'},
-    {h:'腐食',          key:'corrosion',   type:'grade'},
-    {h:'亀裂',          key:'crack',       type:'grade'},
-    {h:'ボルト\n脱落',  key:'boltLoss',    type:'grade'},
-    {h:'破断',          key:'fracture',    type:'grade'},
-    {h:'防食機能\nの劣化', key:'antiCor', type:'grade', isNew:true},
+    {h:'腐食',          key:'corrosion',   type:'grade'},       // ①a〜e
+    {h:'亀裂',          key:'crack',       type:'grade-ae'},    // ②a,eのみ
+    {h:'ボルト\n脱落',  key:'boltLoss',    type:'grade-ae'},    // ③a,eのみ
+    {h:'破断',          key:'fracture',    type:'grade-ae'},    // ④a,eのみ
+    {h:'防食機能\nの劣化', key:'antiCor', type:'grade', isNew:true},  // ⑤a〜e
     {h:'(分類)',        key:'antiCorCls',  type:'text',  isNew:true},
-    {h:'ひびわれ\n漏水',key:'concrete',   type:'grade'},
+    {h:'ひびわれ\n漏水',key:'concrete',   type:'grade'},       // ⑥a〜e
     {h:'(パターン)',    key:'concPat',     type:'text'},
-    {h:'鉄筋\n露出',   key:'steelExp',    type:'grade'},
-    {h:'抜け\n落ち',   key:'fallOff',     type:'grade'},
-    {h:'床版\nひびわれ',key:'slabCrack',  type:'grade'},
-    {h:'PC定着\n部異常',key:'pcAnchor',   type:'grade'},
-    {h:'路面\n凹凸',   key:'roadSurf',    type:'grade'},
-    {h:'支承\n機能障害',key:'bearFunc',   type:'grade'},
-    {h:'補修補強\n材損傷',key:'repairDmg',type:'grade', isNew:true},
+    {h:'鉄筋\n露出',   key:'steelExp',    type:'grade-ae'},    // ⑦a,eのみ
+    {h:'抜け\n落ち',   key:'fallOff',     type:'grade-ae'},    // ⑧a,eのみ
+    {h:'床版\nひびわれ',key:'slabCrack',  type:'grade'},       // ⑨a〜e
+    {h:'PC定着\n部異常',key:'pcAnchor',   type:'grade-ae'},    // ⑩a,eのみ
+    {h:'路面\n凹凸',   key:'roadSurf',    type:'grade-ae'},    // ⑪a,eのみ
+    {h:'支承\n機能障害',key:'bearFunc',   type:'grade-ae'},    // ⑫a,eのみ
+    {h:'補修補強\n材損傷',key:'repairDmg',type:'grade-ae', isNew:true}, // ⑬a,eのみ
     {h:'(分類)',        key:'repairCls',   type:'text',  isNew:true},
-    {h:'沈下\n移動傾斜',key:'settlement', type:'grade', isNew:true},
-    {h:'洗堀',          key:'scour',       type:'grade', isNew:true},
+    {h:'沈下\n移動傾斜',key:'settlement', type:'grade-ae', isNew:true}, // ⑭a,eのみ
+    {h:'洗堀',          key:'scour',       type:'grade-ae', isNew:true}, // ⑮a,eのみ
     {h:'備考',          type:'notes'},
   ];
 
@@ -893,10 +930,24 @@ function renderDamageTable(b) {
       }
 
       if (c.type === 'grade') {
+        // a〜e の5段階評価
         html += `<td class="${cls}">
           <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
             <option value="">-</option>
             ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
+            ${val==='?'?`<option value="?" selected>?</option>`:''}
+          </select></td>`;
+      } else if (c.type === 'grade-ae') {
+        // a,e のみ（要領p.6 表-3.1: 亀裂・ボルト脱落・破断・鉄筋露出・抜け落ち・PC定着部異常・路面凹凸・支承機能障害・補修補強材損傷・沈下移動傾斜・洗堀）
+        // 旧データにb/c/dが入っている場合は警告色で表示
+        const hasInvalid = val && val !== 'a' && val !== 'e' && val !== '?';
+        const aeCls = cls + (hasInvalid ? ' col-new-warn' : '');
+        html += `<td class="${aeCls}" title="${hasInvalid ? '要領上はa/eのみ。値を確認してください。' : ''}">
+          <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
+            <option value="">-</option>
+            <option value="a"${val==='a'?' selected':''}>a</option>
+            <option value="e"${val==='e'?' selected':''}>e</option>
+            ${hasInvalid?`<option value="${val}" selected style="color:red">${val}(!)</option>`:''}
             ${val==='?'?`<option value="?" selected>?</option>`:''}
           </select></td>`;
       } else {
@@ -927,7 +978,8 @@ function renderDamageTable(b) {
 
   html += '</tbody>';
   html += `<tfoot><tr><td colspan="${cols.length}" style="padding:6px 8px;background:#fafafa;font-size:11px;color:#888;text-align:left">
-    ★ 黄地=新テンプレ追加列 ／ 橙地=旧様式「有/無」から変換（要確認） ／ ?=評価区分不明（a〜eを入力してください）
+    ★ 黄地=新テンプレ追加列 ／ 橙地=旧様式「有/無」から変換（要確認）または旧データにa/e以外が混入 ／ ?=評価区分不明（値を入力してください）<br>
+    【要領p.6 表-3.1】a〜e（5段階）: ①腐食 ⑤防食機能 ⑥ひびわれ漏水 ⑨床版ひびわれ　／　a,eのみ（2段階）: ②亀裂 ③ボルト脱落 ④破断 ⑦鉄筋露出 ⑧抜落 ⑩PC定着部 ⑪路面 ⑫支承 ⑬補修 ⑭沈下 ⑮洗堀
   </td></tr></tfoot>`;
 
   document.getElementById('damage-table').innerHTML = html;
