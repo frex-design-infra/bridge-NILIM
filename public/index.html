@@ -728,7 +728,11 @@ function parseSpan(data, spanNum) {
       span.others = String(row[1]||row[2]||'').trim();
       break;
     }
-    if (c0) curType = c0;
+    if (c0) {
+      curType = c0;
+      // 部材種別の正規化: 旧様式の表記を新テンプレ統一名称に変換
+      if (/^橋台/.test(curType) || /^橋脚/.test(curType)) curType = '下部工';
+    }
     const c1 = row[1];
     if (c1 === null || c1 === undefined || c1 === '') continue;
 
