@@ -1720,7 +1720,7 @@ function bridgePayload(bridge) {
 }
 
 async function saveBridgeToSupabase(bridge) {
-  if (!supabaseClient) return null;
+  if (!supabaseClient) return { id: null, error: 'Supabase未初期化' };
 
   const payload = {
     management_number: bridge.managementNumber || null,
@@ -1732,23 +1732,30 @@ async function saveBridgeToSupabase(bridge) {
   if (bridge._sbId) {
     const { error } = await supabaseClient
       .from('bridges').update(payload).eq('id', bridge._sbId);
-    if (error) { console.error('update bridge:', error); return null; }
-    return bridge._sbId;
+    if (error) return { id: null, error: error.message };
+    return { id: bridge._sbId, error: null };
   } else {
     const { data, error } = await supabaseClient
       .from('bridges').insert(payload).select('id').single();
-    if (error) { console.error('insert bridge:', error); return null; }
+    if (error) return { id: null, error: error.message };
     bridge._sbId = data.id;
-    return data.id;
+    return { id: data.id, error: null };
   }
 }
 
 async function saveCurrentBridge() {
   if (selBridge < 0) return;
   const st = document.getElementById('save-status');
+  st.style.color = '#555';
   st.textContent = '保存中...';
-  const id = await saveBridgeToSupabase(bridges[selBridge]);
-  st.textContent = id ? `✓ 保存完了 ${new Date().toLocaleTimeString('ja-JP')}` : '✗ 保存に失敗しました';
+  const { id, error } = await saveBridgeToSupabase(bridges[selBridge]);
+  if (id) {
+    st.style.color = '#2e7d32';
+    st.textContent = `✓ 保存完了 ${new Date().toLocaleTimeString('ja-JP')}`;
+  } else {
+    st.style.color = '#c62828';
+    st.textContent = `✗ 失敗: ${error}`;
+  }
 }
 
 async function approveBridge(bi) {
