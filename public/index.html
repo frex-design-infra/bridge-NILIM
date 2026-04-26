@@ -1,0 +1,2008 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>国総研調書作成ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', sans-serif; font-size: 14px; background: #f0f2f5; color: #333; }
+
+/* ヘッダー */
+header { background: #1e3a5f; color: white; padding: 14px 24px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+header h1 { font-size: 17px; font-weight: 600; letter-spacing: 0.5px; }
+header .sub { margin-left: auto; font-size: 11px; opacity: 0.6; }
+
+/* タブ */
+.tabs { display: flex; background: #16304f; }
+.tab { padding: 11px 22px; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 3px solid transparent; font-size: 13px; transition: all 0.15s; user-select: none; }
+.tab:hover { color: white; background: rgba(255,255,255,0.08); }
+.tab.active { color: white; border-bottom-color: #5dade2; background: rgba(255,255,255,0.06); }
+
+/* コンテンツ */
+.content { display: none; padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
+.content.active { display: block; }
+
+/* カード */
+.card { background: white; border-radius: 8px; padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.09); margin-bottom: 16px; }
+.card h2 { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: #1e3a5f; display: flex; align-items: center; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+
+/* ドロップゾーン */
+.drop-zone { border: 2px dashed #ccd0d9; border-radius: 8px; padding: 36px 20px; text-align: center; cursor: pointer; transition: all 0.2s; color: #888; }
+.drop-zone:hover, .drop-zone.dragover { border-color: #5dade2; background: #eef7fd; color: #1e3a5f; }
+.drop-zone .icon { font-size: 40px; margin-bottom: 10px; }
+.drop-zone .hint { font-size: 12px; color: #aaa; margin-top: 6px; }
+
+/* ボタン */
+.btn { padding: 7px 15px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+.btn-primary { background: #1e3a5f; color: white; }
+.btn-primary:hover { background: #2a5082; }
+.btn-success { background: #1e6b3e; color: white; }
+.btn-success:hover { background: #27854e; }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-outline { background: white; border: 1px solid #ccd0d9; color: #555; }
+.btn-outline:hover { background: #f5f6fa; }
+
+/* テーブル */
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { background: #f0f2f5; padding: 7px 5px; text-align: center; border: 1px solid #dce0e8; font-weight: 600; white-space: nowrap; font-size: 11px; line-height: 1.3; }
+td { padding: 4px 3px; border: 1px solid #dce0e8; text-align: center; vertical-align: middle; }
+td input[type="text"], td select { width: 100%; border: none; background: transparent; text-align: center; font-size: 12px; padding: 2px 1px; font-family: inherit; }
+td input:focus, td select:focus { outline: 1px solid #5dade2; background: #eef7fd; border-radius: 2px; }
+
+/* 損傷評価セル色 */
+td.val-a { background: #f0fdf4; }
+td.val-b { background: #fef9c3; }
+td.val-c { background: #fef3c7; }
+td.val-d { background: #fde8d0; }
+td.val-e { background: #fde8e8; }
+td.col-new { background: #fdfbea; }
+td.col-new-warn { background: #fff3cd; }
+td.member-label { text-align: left; font-weight: 600; background: #f8f9fb; white-space: nowrap; font-size: 12px; padding: 4px 8px; }
+td.notes-col { text-align: left; }
+td.notes-col input { text-align: left; }
+
+/* バッジ */
+.badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.badge-ok { background: #e8f5e9; color: #2e7d32; }
+.badge-warn { background: #fff3e0; color: #bf360c; }
+.badge-info { background: #e3f2fd; color: #1565c0; }
+
+/* フォーム */
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.form-group { display: flex; flex-direction: column; gap: 3px; }
+.form-group label { font-size: 11px; color: #777; font-weight: 600; }
+.form-group input, .form-group select { padding: 6px 9px; border: 1px solid #dce0e8; border-radius: 5px; font-size: 13px; font-family: inherit; }
+.form-group input:focus, .form-group select:focus { outline: none; border-color: #5dade2; }
+
+/* 橋梁リスト */
+.bridge-list { display: flex; flex-direction: column; gap: 6px; }
+.bridge-item { display: flex; align-items: center; gap: 10px; padding: 10px 13px; background: #fafbfc; border: 1px solid #e8eaed; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.bridge-item:hover { background: #eef7fd; border-color: #5dade2; }
+.bridge-item.selected { background: #e3f2fd; border-color: #1e3a5f; }
+.bridge-item .bname { font-weight: 600; flex: 1; font-size: 13px; }
+.bridge-item .broute { color: #888; font-size: 11px; }
+
+/* ステータスアイコン */
+.status-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.si-ok { background: #e8f5e9; color: #2e7d32; }
+.si-warn { background: #fff3e0; color: #bf360c; }
+.si-err { background: #ffebee; color: #c62828; }
+
+/* サムネイル */
+.thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin-top: 12px; }
+.thumb { position: relative; aspect-ratio: 4/3; overflow: hidden; border-radius: 5px; border: 2px solid #dce0e8; background: #f0f2f5; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb-meta { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.72); padding: 4px 5px; }
+.thumb-meta .cam { font-size: 10px; color: #bbb; }
+.thumb-meta input { display: block; width: 100%; background: rgba(255,255,255,0.15); border: none; border-bottom: 1px solid rgba(255,255,255,0.3); color: white; font-size: 11px; text-align: center; padding: 1px 2px; font-family: inherit; }
+.thumb-meta input::placeholder { color: rgba(255,255,255,0.5); }
+.thumb.assigned { border-color: #2e7d32; }
+.thumb.unassigned { border-color: #ff9800; }
+
+/* アラート */
+.alert { padding: 9px 13px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
+.alert-info { background: #e3f2fd; color: #1565c0; border-left: 3px solid #1565c0; }
+.alert-warn { background: #fff3e0; color: #bf360c; border-left: 3px solid #ff9800; }
+.alert-ok { background: #e8f5e9; color: #2e7d32; border-left: 3px solid #2e7d32; }
+
+/* 凡例 */
+.legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; margin-bottom: 12px; }
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-color { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.1); }
+
+/* ログ */
+.log-box { background: #1a1a2e; color: #e0e0e0; border-radius: 6px; padding: 14px; font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.8; max-height: 300px; overflow-y: auto; }
+
+/* プログレスバー */
+.progress { height: 6px; background: #e8eaed; border-radius: 3px; overflow: hidden; margin-bottom: 6px; }
+.progress-bar { height: 100%; background: #5dade2; border-radius: 3px; transition: width 0.3s; }
+
+/* PDFマッピングテーブル */
+.pdf-map-table th { font-size: 11px; white-space: nowrap; }
+.pdf-map-table td { font-size: 12px; }
+.match-ok  { color: #2e7d32; font-weight: 600; }
+.match-ng  { color: #bf360c; }
+.match-pending { color: #888; }
+
+/* サイドバーレイアウト */
+.sidebar-layout { display: flex; gap: 16px; }
+.sidebar { width: 210px; flex-shrink: 0; }
+.sidebar-body { flex: 1; min-width: 0; }
+
+/* ログインオーバーレイ */
+#login-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.login-card { background: white; border-radius: 12px; padding: 32px 28px; width: 360px; box-shadow: 0 12px 40px rgba(0,0,0,0.25); }
+.login-card h2 { font-size: 18px; margin-bottom: 4px; color: #1e3a5f; }
+.login-card .sub { font-size: 12px; color: #999; margin-bottom: 22px; display: block; }
+
+/* ヘッダーユーザー情報 */
+.header-user { margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.header-user .email { color: rgba(255,255,255,0.8); }
+
+/* 是認バッジ・ボタン */
+.approval-ok  { background: #e8f5e9; color: #2e7d32; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.approval-no  { background: #fff3e0; color: #bf360c; display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.approval-panel { background: #f8f9fb; border: 1px solid #dce0e8; border-radius: 6px; padding: 12px 16px; }
+.approval-list { margin-top: 8px; font-size: 12px; }
+.approval-list li { padding: 3px 0; color: #555; list-style: none; }
+
+/* SQLコードブロック */
+.sql-block { background: #1a1a2e; color: #a8d8a8; border-radius: 6px; padding: 12px 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; max-height: 220px; overflow-y: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>国総研調書作成ツール</h1>
+  <span class="sub" style="margin-left:14px">道路橋定期点検 — 過年度→国総研様式 変換・エクスポート</span>
+  <div class="header-user">
+    <span class="email" id="header-user-email"></span>
+    <button id="btn-logout" class="btn btn-sm"
+      style="display:none;color:white;border:1px solid rgba(255,255,255,0.4);background:transparent"
+      onclick="doLogout()">ログアウト</button>
+  </div>
+</header>
+
+<!-- ===== ログインオーバーレイ ===== -->
+<div id="login-overlay">
+  <div class="login-card">
+    <h2>国総研調書作成ツール</h2>
+    <span class="sub">ログインしてください</span>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>メールアドレス</label>
+      <input type="email" id="login-email" placeholder="example@company.com" autocomplete="email"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div class="form-group" style="margin-bottom:18px">
+      <label>パスワード</label>
+      <input type="password" id="login-password" placeholder="パスワード" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:10px;font-size:14px" onclick="doLogin()">ログイン</button>
+    <div id="login-error" style="margin-top:10px;color:#c62828;font-size:12px;min-height:18px"></div>
+    <div id="login-config-hint" style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#999">
+      ※ Supabase未設定の場合はログインできません。先にセットアップタブで設定してください。
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active"   data-tab="setup">セットアップ</div>
+  <div class="tab"          data-tab="import">インポート</div>
+  <div class="tab"          data-tab="review">確認・編集</div>
+  <div class="tab"          data-tab="photos">写真管理</div>
+  <div class="tab"          data-tab="export">エクスポート</div>
+</div>
+
+<!-- ===== セットアップ ===== -->
+<div id="tab-setup" class="content active">
+  <div class="card">
+    <h2>テンプレの設定</h2>
+    <p style="color:#666;font-size:13px;margin-bottom:14px">
+      エクスポート時のベースとなる <strong>template.xlsx</strong> を読み込んでください。
+    </p>
+    <div class="drop-zone" id="template-drop">
+      <div class="icon">📄</div>
+      <div>template.xlsx をドロップ、またはクリックして選択</div>
+      <div class="hint">国総研様式テンプレファイル</div>
+      <input type="file" id="template-input" accept=".xlsx,.xls" style="display:none">
+    </div>
+    <div id="template-status" style="margin-top:12px"></div>
+  </div>
+  <div class="card">
+    <h2>Supabase 接続設定</h2>
+    <p style="color:#666;font-size:13px;margin-bottom:14px">
+      SupabaseプロジェクトのURLとanon keyを入力してください。<br>
+      <span style="font-size:11px;color:#aaa">anon keyはブラウザに保存されます。チームで同じURLとキーを使用します。</span>
+    </p>
+    <div class="form-grid" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>Supabase URL</label>
+        <input type="url" id="sb-url" placeholder="https://xxxx.supabase.co">
+      </div>
+      <div class="form-group">
+        <label>anon key</label>
+        <input type="text" id="sb-key" placeholder="eyJhbGci...">
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn btn-primary" onclick="saveSupabaseConfig()">保存して接続</button>
+      <span id="sb-save-status" style="font-size:12px;color:#2e7d32"></span>
+    </div>
+    <details style="margin-top:16px">
+      <summary style="cursor:pointer;font-size:12px;color:#1565c0;font-weight:600">Supabase で実行するSQL（初回のみ）</summary>
+      <div class="sql-block" style="margin-top:8px">create table public.bridges (
+  id uuid default gen_random_uuid() primary key,
+  management_number text,
+  name text,
+  data jsonb not null,
+  created_by uuid references auth.users(id),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create table public.approvals (
+  id uuid default gen_random_uuid() primary key,
+  bridge_id uuid references public.bridges(id) on delete cascade,
+  user_id uuid references auth.users(id),
+  user_email text,
+  notes text,
+  approved_at timestamptz default now()
+);
+
+alter table public.bridges enable row level security;
+alter table public.approvals enable row level security;
+
+create policy "bridges_select" on public.bridges for select to authenticated using (true);
+create policy "bridges_insert" on public.bridges for insert to authenticated with check (true);
+create policy "bridges_update" on public.bridges for update to authenticated using (true);
+create policy "approvals_select" on public.approvals for select to authenticated using (true);
+create policy "approvals_insert" on public.approvals for insert to authenticated
+  with check (auth.uid() = user_id);</div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>使い方</h2>
+    <ol style="font-size:13px;color:#555;line-height:2;padding-left:20px">
+      <li><strong>セットアップ</strong>：template.xlsx を読み込む</li>
+      <li><strong>インポート</strong>：過年度点検Excelファイルを複数ドロップ</li>
+      <li><strong>確認・編集</strong>：マッピングされたデータを確認・修正</li>
+      <li><strong>写真管理</strong>：橋梁ごとに写真フォルダを選択、サムネイルで確認・番号割当</li>
+      <li><strong>エクスポート</strong>：国総研様式Excelを橋梁ごとに出力（ZIP）</li>
+    </ol>
+    <div class="alert alert-warn" style="margin-top:14px">
+      <strong>損傷図PDF連携</strong>は後日実装予定。現在は写真番号を手動で割り当ててください。
+    </div>
+  </div>
+</div>
+
+<!-- ===== インポート ===== -->
+<div id="tab-import" class="content">
+  <div class="card">
+    <h2>過年度点検ファイルのインポート</h2>
+    <p style="color:#666;font-size:13px;margin-bottom:14px">
+      過年度点検Excel（.xls / .xlsx）を複数ドロップまたは選択してください。
+    </p>
+    <div class="drop-zone" id="import-drop">
+      <div class="icon">📂</div>
+      <div>Excelファイルをドロップ、またはクリックして選択</div>
+      <div class="hint">複数ファイル同時OK</div>
+      <input type="file" id="import-input" accept=".xlsx,.xls" multiple style="display:none">
+    </div>
+  </div>
+  <div class="card" id="import-results" style="display:none">
+    <h2>インポート結果</h2>
+    <div id="import-list" class="bridge-list"></div>
+  </div>
+</div>
+
+<!-- ===== 確認・編集 ===== -->
+<div id="tab-review" class="content">
+  <div class="sidebar-layout">
+    <div class="sidebar">
+      <div class="card" style="padding:12px">
+        <h2 style="margin-bottom:10px">橋梁一覧</h2>
+        <div id="review-sidebar" class="bridge-list"></div>
+      </div>
+    </div>
+    <div class="sidebar-body">
+      <div id="review-placeholder" class="card" style="text-align:center;padding:60px;color:#aaa">
+        左の一覧から橋梁を選択してください
+      </div>
+      <div id="review-content" style="display:none">
+        <!-- クラウド保存・是認 -->
+        <div class="card" id="card-actions" style="padding:14px 18px">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveCurrentBridge()">クラウドに保存</button>
+            <button class="btn btn-success btn-sm" onclick="approveBridge(selBridge)">是認する</button>
+            <span id="save-status" style="font-size:11px;color:#2e7d32"></span>
+            <div id="approval-status-inline" style="margin-left:auto"></div>
+          </div>
+          <div id="approval-history" class="approval-panel" style="display:none;margin-top:10px">
+            <strong style="font-size:12px">是認履歴</strong>
+            <ul id="approval-list" class="approval-list"></ul>
+          </div>
+        </div>
+
+        <div class="card" id="card-shogen">
+          <h2>橋梁諸元 <span class="badge badge-info" style="font-size:10px">様式1</span></h2>
+          <div class="form-grid" id="form-shogen"></div>
+        </div>
+        <div class="card" id="card-damage">
+          <h2>損傷程度の評価 <span class="badge badge-info" style="font-size:10px">様式2</span>
+            <span id="span-tabs" style="margin-left:12px;font-weight:400;font-size:12px"></span>
+          </h2>
+          <div class="legend">
+            <div class="legend-item"><div class="legend-color" style="background:#fdfbea;border-color:#e0d800"></div>新テンプレで追加された列</div>
+            <div class="legend-item"><div class="legend-color" style="background:#fde8d0;border-color:#f5a623"></div>要確認（有/無から変換）</div>
+            <div class="legend-item"><div class="legend-color" style="background:#fde8e8;border-color:#e00"></div>e（最大損傷）</div>
+          </div>
+          <div style="overflow-x:auto">
+            <table id="damage-table"></table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 写真管理 ===== -->
+<div id="tab-photos" class="content">
+  <div class="sidebar-layout">
+    <div class="sidebar">
+      <div class="card" style="padding:12px">
+        <h2 style="margin-bottom:10px">橋梁一覧</h2>
+        <div id="photo-sidebar" class="bridge-list"></div>
+      </div>
+    </div>
+    <div class="sidebar-body">
+      <div id="photo-placeholder" class="card" style="text-align:center;padding:60px;color:#aaa">
+        左の一覧から橋梁を選択してください
+      </div>
+      <div id="photo-content" style="display:none">
+
+        <!-- 損傷図PDF -->
+        <div class="card">
+          <h2>損傷図PDF 読み込み（写真番号 → カメラ番号 自動照合）</h2>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+            <button class="btn btn-primary" id="btn-pdf-upload">損傷図PDFを選択</button>
+            <input type="file" id="pdf-input" accept=".pdf" style="display:none">
+            <span id="pdf-status" style="font-size:12px;color:#888"></span>
+          </div>
+          <div id="pdf-progress-area" style="display:none">
+            <div class="progress"><div class="progress-bar" id="pdf-pbar" style="width:0%"></div></div>
+            <div id="pdf-log" style="font-size:11px;color:#666;line-height:1.7;margin-top:4px"></div>
+          </div>
+          <div id="pdf-result-area" style="display:none">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+              <span id="pdf-match-summary" style="font-size:13px;font-weight:600;color:#2e7d32"></span>
+              <button class="btn btn-success btn-sm" onclick="applyAllMappings()">自動割当を適用</button>
+            </div>
+            <div style="max-height:260px;overflow-y:auto">
+              <table class="pdf-map-table" style="width:100%;border-collapse:collapse">
+                <thead><tr>
+                  <th style="background:#f0f2f5;padding:6px;border:1px solid #dce0e8">写真No.</th>
+                  <th style="background:#f0f2f5;padding:6px;border:1px solid #dce0e8">カメラ末尾4桁</th>
+                  <th style="background:#f0f2f5;padding:6px;border:1px solid #dce0e8">部材名</th>
+                  <th style="background:#f0f2f5;padding:6px;border:1px solid #dce0e8">損傷種類</th>
+                  <th style="background:#f0f2f5;padding:6px;border:1px solid #dce0e8">マッチ状況</th>
+                </tr></thead>
+                <tbody id="pdf-map-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 写真フォルダ -->
+        <div class="card">
+          <h2>写真フォルダ</h2>
+          <div class="alert alert-info">
+            カメラファイル名末尾4桁（例：DSC_<strong>0042</strong>.JPG）で照合します。
+            PDFで自動割当後、未割当分は「写真No.」欄に手動入力可能。緑枠＝割当済み、橙枠＝未割当。
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <button class="btn btn-primary" id="btn-photo-folder">写真フォルダを選択</button>
+            <input type="file" id="photo-folder-input" webkitdirectory multiple style="display:none" accept="image/*">
+            <span id="photo-folder-status" style="font-size:12px;color:#888"></span>
+            <span id="photo-assigned-count" style="font-size:12px;color:#2e7d32;margin-left:auto"></span>
+          </div>
+          <div id="photo-grid" class="thumb-grid"></div>
+        </div>
+
+        <!-- 割当済みマッピング確認 -->
+        <div class="card" id="photo-ledger-card" style="display:none">
+          <h2>写真番号マッピング確認</h2>
+          <table id="photo-ledger-table">
+            <thead><tr><th>写真No.</th><th>カメラ番号</th><th>ファイル名</th><th>プレビュー</th></tr></thead>
+            <tbody id="photo-ledger-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== エクスポート ===== -->
+<div id="tab-export" class="content">
+  <div class="card">
+    <h2>エクスポート</h2>
+    <div id="export-summary"></div>
+    <div style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-success" id="btn-export-all" style="font-size:14px;padding:9px 22px">
+        全橋梁をエクスポート（ZIP）
+      </button>
+    </div>
+  </div>
+  <div class="card" id="export-log-card" style="display:none">
+    <h2>エクスポートログ</h2>
+    <div class="log-box" id="export-log"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// STATE
+// ============================================================
+let templateWB = null;       // テンプレworkbook
+let bridges    = [];         // BridgeData[]
+let selBridge  = -1;         // 確認タブ選択中
+let selPhoto   = -1;         // 写真タブ選択中
+let selSpan    = 0;          // 確認タブ選択径間
+
+// ============================================================
+// TAB
+// ============================================================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    const name = tab.dataset.tab;
+    document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'review') refreshSidebar('review');
+    if (name === 'photos') refreshSidebar('photos');
+    if (name === 'export') refreshExportSummary();
+  });
+});
+
+// ============================================================
+// TEMPLATE LOAD
+// ============================================================
+const templateDrop  = document.getElementById('template-drop');
+const templateInput = document.getElementById('template-input');
+
+templateDrop.addEventListener('click', () => templateInput.click());
+templateDrop.addEventListener('dragover',  e => { e.preventDefault(); templateDrop.classList.add('dragover'); });
+templateDrop.addEventListener('dragleave', () => templateDrop.classList.remove('dragover'));
+templateDrop.addEventListener('drop', e => {
+  e.preventDefault(); templateDrop.classList.remove('dragover');
+  if (e.dataTransfer.files[0]) loadTemplate(e.dataTransfer.files[0]);
+});
+templateInput.addEventListener('change', e => { if (e.target.files[0]) loadTemplate(e.target.files[0]); });
+
+function loadTemplate(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    templateWB = XLSX.read(ev.target.result, { type: 'array' });
+    document.getElementById('template-status').innerHTML =
+      `<div class="alert alert-ok">テンプレ読み込み完了：<strong>${file.name}</strong>（シート: ${templateWB.SheetNames.join(' / ')}）</div>`;
+    templateDrop.style.borderColor = '#2e7d32';
+    templateDrop.style.background  = '#f0fdf4';
+    templateDrop.querySelector('div:not(.hint):not(.icon)').textContent = 'テンプレ設定済み（クリックで再選択）';
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// ============================================================
+// IMPORT
+// ============================================================
+const importDrop  = document.getElementById('import-drop');
+const importInput = document.getElementById('import-input');
+
+importDrop.addEventListener('click', () => importInput.click());
+importDrop.addEventListener('dragover',  e => { e.preventDefault(); importDrop.classList.add('dragover'); });
+importDrop.addEventListener('dragleave', () => importDrop.classList.remove('dragover'));
+importDrop.addEventListener('drop', e => {
+  e.preventDefault(); importDrop.classList.remove('dragover');
+  processImport(e.dataTransfer.files);
+});
+importInput.addEventListener('change', e => processImport(e.target.files));
+
+function processImport(files) {
+  const results = document.getElementById('import-results');
+  const list    = document.getElementById('import-list');
+  results.style.display = 'block';
+
+  Array.from(files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const wb     = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
+        const bridge = parseOldExcel(wb, file.name);
+        bridges.push(bridge);
+        list.insertAdjacentHTML('beforeend', `
+          <div class="bridge-item">
+            <div class="status-icon si-ok">✓</div>
+            <div>
+              <div class="bname">${bridge.name || '(橋梁名不明)'}</div>
+              <div class="broute">${bridge.routeName || ''} ／ ${file.name}</div>
+            </div>
+            <span class="badge badge-ok">完了</span>
+            <span class="badge badge-info">${bridge.spans.length}径間</span>
+          </div>`);
+      } catch(err) {
+        list.insertAdjacentHTML('beforeend', `
+          <div class="bridge-item" style="border-color:#ffcdd2">
+            <div class="status-icon si-err">✗</div>
+            <div class="bname">${file.name}</div>
+            <span class="badge" style="background:#ffebee;color:#c62828">${err.message}</span>
+          </div>`);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ============================================================
+// PARSER: 旧様式 Excel → BridgeData
+// ============================================================
+function parseOldExcel(wb, filename) {
+  const b = {
+    filename,
+    name: '', routeName: '', managementNumber: '', facilityId: '',
+    locationFrom: '', locationTo: '',
+    manager: '', foundingYear: '', liveLoad: '', designCode: '',
+    bridgeLength: '', totalSpans: '',
+    superStructure: '', subStructure: '', foundationType: '',
+    inspectionDate: '',
+    coastalDistance: '', emergencyRoute: '', detourRoute: '', underCondition: '',
+    // 諸元2
+    prefName: '', municipalityName: '', officeName: '',
+    bridgeNumber: '', routeCode: '', constructionYear: '', constructionMonth: '',
+    roadType: '', bridgeType: '', latitude: '', longitude: '',
+    locationDetail: '', distanceMark: '', salinityClass: '',
+    // 上部工諸元
+    spanInfo: [],
+    // 下部工諸元
+    subWorks: [],
+    // 損傷
+    spans: [],
+    // 写真
+    photos: []
+  };
+
+  // --- 橋梁諸元 ---
+  if (wb.Sheets['橋梁諸元']) {
+    const d = s2a(wb.Sheets['橋梁諸元']);
+    b.name           = fv(d, '橋梁名')   || '';
+    b.routeName      = fv(d, '路線名')   || '';
+    b.manager        = fv(d, '管轄')     || fv(d, '管理者') || '';
+    b.locationFrom   = fLoc(d, '自')     || '';
+    b.locationTo     = fLoc(d, '至')     || '';
+    b.foundingYear   = fv(d, '供用開始日') || fv(d, '架設年度') || '';
+    b.liveLoad       = fv(d, '活荷重・等級') || '';
+    b.designCode     = fv(d, '適用示方書')   || '';
+    b.bridgeLength   = fv(d, '橋長')         || '';
+    b.totalSpans     = fv(d, '総径間数')     || '';
+    b.superStructure = fv(d, '上部構造形式') || '';
+    b.subStructure   = fv(d, '下部構造形式') || '';
+    b.foundationType = fv(d, '基礎形式')     || '';
+    b.inspectionDate = fv(d, '点検日')        || '';
+    b.coastalDistance = fv(d, '海岸からの距離')    || '';
+    b.emergencyRoute  = fv(d, '緊急輸送路の指定')  || '';
+    b.detourRoute     = fv(d, '迂回路の有無')      || fv(d, '優先確保ルートの指定') || '';
+    b.underCondition  = fv(d, '路下条件')           || '';
+  }
+
+  // --- 橋梁諸元2 ---
+  if (wb.Sheets['橋梁諸元2']) {
+    const d = s2a(wb.Sheets['橋梁諸元2']);
+    b.prefName         = fv(d, '県名')          || '';
+    b.municipalityName = fv(d, '地方公共団体名') || '';
+    b.officeName       = fv(d, '事務所名')       || '';
+    b.managementNumber = fv(d, '橋梁管理番号')   || '';
+    b.bridgeNumber     = fv(d, '橋梁番号')       || '';
+    b.routeCode        = fv(d, '路線コード')     || '';
+    b.roadType         = fv(d, '道路種別')       || '';
+    b.bridgeType       = fv(d, '橋梁種別')       || '';
+    b.latitude         = fv(d, '緯度')           || '';
+    b.longitude        = fv(d, '経度')           || '';
+    b.locationDetail   = fv(d, '所在地')         || '';
+    b.distanceMark     = fv(d, '距離標')         || '';
+    // 架設年月
+    for (const row of d) {
+      if (row && row.some(c => String(c||'').includes('架設年月'))) {
+        const nums = row.filter(c => typeof c === 'number' && c > 1900 && c < 2100);
+        if (nums.length) b.constructionYear = String(nums[0]);
+        break;
+      }
+    }
+  }
+
+  // --- 上部工諸元 ---
+  if (wb.Sheets['上部工諸元']) {
+    const d = s2a(wb.Sheets['上部工諸元']);
+    const si = {};
+    si.materialClass  = fv(d, '材料区分')    || '';
+    si.structureType  = fv(d, '構造形式')    || '';
+    si.girderCount    = fv(d, '桁本数')      || '';
+    si.spanLength     = fv(d, '支間長')      || '';
+    si.startBearing   = fv(d, '起点側支承種類')    || '';
+    si.endBearing     = fv(d, '終点側支承種類')    || '';
+    si.startExpansion = fv(d, '起点側伸縮装置種類') || '';
+    si.endExpansion   = fv(d, '終点側伸縮装置種類') || '';
+    b.spanInfo = [si];
+  }
+
+  // --- 下部工諸元 ---
+  if (wb.Sheets['下部工諸元']) {
+    const d = s2a(wb.Sheets['下部工諸元']);
+    let headerRow = -1;
+    for (let r = 0; r < d.length; r++) {
+      if (d[r] && d[r][0] === '躯体番号') { headerRow = r; break; }
+    }
+    if (headerRow >= 0) {
+      for (let r = headerRow + 1; r < d.length; r++) {
+        if (d[r] && d[r][0]) {
+          b.subWorks.push({ id: d[r][0], material: d[r][1]||'', structureType: d[r][3]||'' });
+        }
+      }
+    }
+  }
+
+  // --- 第X径間シート ---
+  const spanSheets = wb.SheetNames.filter(n => /^第\d+径間/.test(n));
+  b.spans = spanSheets.map((sn, i) => parseSpan(s2a(wb.Sheets[sn]), i + 1));
+
+  return b;
+}
+
+// ============================================================
+// SPAN PARSER
+// ============================================================
+function parseSpan(data, spanNum) {
+  const span = { spanNumber: spanNum, members: [], others: '', inspYear: '', structType: '' };
+
+  // ヘッダー行を探す（"①腐食" or "腐食" が含まれる行）
+  let hdr = -1, isOld = false;
+  for (let r = 0; r < data.length; r++) {
+    const str = (data[r]||[]).map(c=>String(c||'')).join('|');
+    if (str.includes('①腐食')) { hdr = r; isOld = true; break; }
+    if (str.includes('腐食') && str.includes('亀裂')) { hdr = r; isOld = false; break; }
+  }
+  if (hdr === -1) return span;
+
+  // 調査年・構造形式
+  for (let r = 0; r < hdr; r++) {
+    const row = data[r]||[];
+    const str = row.map(c=>String(c||'')).join('|');
+    if (str.includes('調査年')) {
+      for (let c = 0; c < row.length; c++) {
+        if (String(row[c]||'').includes('調査年')) {
+          for (let dc = 1; dc <= 5; dc++) {
+            if (row[c+dc] && row[c+dc] !== '') { span.inspYear = String(row[c+dc]); break; }
+          }
+        }
+      }
+    }
+    if (str.includes('構造形式') && !str.includes('上部')) {
+      for (let c = 0; c < row.length; c++) {
+        if (String(row[c]||'').includes('構造形式')) {
+          for (let dc = 1; dc <= 5; dc++) {
+            if (row[c+dc] && row[c+dc] !== '') { span.structType = String(row[c+dc]); break; }
+          }
+        }
+      }
+    }
+  }
+
+  // データ行を解析
+  let curType = '';
+  for (let r = hdr + 1; r < data.length; r++) {
+    const row = data[r]||[];
+    const c0 = String(row[0]||'').trim();
+
+    if (c0.startsWith('その他') || c0 === 'その他') {
+      span.others = String(row[1]||row[2]||'').trim();
+      break;
+    }
+    if (c0) curType = c0;
+    const c1 = row[1];
+    if (c1 === null || c1 === undefined || c1 === '') continue;
+
+    span.members.push({
+      type  : curType,
+      number: c1,
+      d     : isOld ? mapOld(row) : mapNew(row),
+      notes : String((isOld ? row[15] : row[20])||'').trim()
+    });
+  }
+
+  return span;
+}
+
+// 旧12列 → 統一キー
+function mapOld(row) {
+  const v  = x => { const s = String(x??'').trim(); return s===''||s==='無'||s==='―' ? null : s; };
+  const yn = x => { const s = String(x??'').trim(); return s==='無'?'a': s==='有'?'?': v(x); };
+  return {
+    corrosion  : v(row[2]),   crack      : v(row[3]),
+    boltLoss   : v(row[4]),   fracture   : v(row[5]),
+    antiCor    : null,        antiCorCls : null,    // 旧様式にない
+    concrete   : v(row[6]),   concPat    : v(row[7]),
+    steelExp   : yn(row[8]),  fallOff    : yn(row[9]),
+    slabCrack  : v(row[10]),  pcAnchor   : yn(row[11]),
+    roadSurf   : yn(row[12]), bearFunc   : yn(row[13]),
+    repairDmg  : null,        repairCls  : null,    // 旧様式にない
+    settlement : v(row[14]),  scour      : null,    // ⑫下部工の変状→settlement
+    _oldSubWork: row[14]!==null && row[14]!=='' && String(row[14]||'').trim()!=='無',
+    _hasYuHari : [row[8],row[9],row[11],row[12],row[13]].some(x=>String(x||'').trim()==='有')
+  };
+}
+
+// 新テンプレ17列 → 統一キー
+function mapNew(row) {
+  const v = x => { const s = String(x??'').trim(); return s===''||s==='―' ? null : s; };
+  return {
+    corrosion  : v(row[2]),   crack      : v(row[3]),
+    boltLoss   : v(row[4]),   fracture   : v(row[5]),
+    antiCor    : v(row[6]),   antiCorCls : v(row[7]),
+    concrete   : v(row[8]),   concPat    : v(row[9]),
+    steelExp   : v(row[10]),  fallOff    : v(row[11]),
+    slabCrack  : v(row[12]),  pcAnchor   : v(row[13]),
+    roadSurf   : v(row[14]),  bearFunc   : v(row[15]),
+    repairDmg  : v(row[16]),  repairCls  : v(row[17]),
+    settlement : v(row[18]),  scour      : v(row[19]),
+    _oldSubWork: false,       _hasYuHari : false
+  };
+}
+
+// ============================================================
+// HELPER
+// ============================================================
+function s2a(ws) { return XLSX.utils.sheet_to_json(ws, { header:1, defval:null }); }
+
+function fv(data, label, maxRight=16) {
+  for (const row of data) {
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (String(row[c]||'').trim() === label) {
+        for (let dc = 1; dc <= maxRight; dc++) {
+          const v = row[c+dc];
+          if (v !== null && v !== '' && v !== undefined) return String(v).trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function fLoc(data, marker) {
+  for (const row of data) {
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      if (String(row[c]||'').trim() === marker) {
+        for (let dc = 1; dc <= 8; dc++) {
+          const v = row[c+dc];
+          if (v !== null && v !== '' && v !== undefined) return String(v).trim();
+        }
+      }
+    }
+  }
+  return null;
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function refreshSidebar(tab) {
+  const el  = document.getElementById(tab + '-sidebar');
+  const sel = tab === 'review' ? selBridge : selPhoto;
+  el.innerHTML = '';
+  if (!bridges.length) {
+    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">橋梁データなし</div>';
+    return;
+  }
+  bridges.forEach((b, i) => {
+    const item = document.createElement('div');
+    item.className = 'bridge-item' + (i === sel ? ' selected' : '');
+    item.innerHTML = `<div><div class="bname">${b.name||'(不明)'}</div><div class="broute">${b.routeName||''}</div></div>`;
+    item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
+    el.appendChild(item);
+  });
+}
+
+// ============================================================
+// REVIEW TAB
+// ============================================================
+function selectBridge(i) {
+  selBridge = i; selSpan = 0;
+  refreshSidebar('review');
+  renderReview(bridges[i]);
+  renderApprovalStatus(i);
+  document.getElementById('save-status').textContent = '';
+}
+
+function renderReview(b) {
+  document.getElementById('review-placeholder').style.display = 'none';
+  document.getElementById('review-content').style.display = 'block';
+
+  // ---- 橋梁諸元フォーム ----
+  const fields = [
+    {label:'橋梁名',        key:'name'},
+    {label:'路線名',        key:'routeName'},
+    {label:'橋梁管理番号',  key:'managementNumber'},
+    {label:'施設ID',        key:'facilityId'},
+    {label:'所在地（自）',  key:'locationFrom'},
+    {label:'所在地（至）',  key:'locationTo'},
+    {label:'管理者',        key:'manager'},
+    {label:'架設年度',      key:'foundingYear'},
+    {label:'活荷重・等級',  key:'liveLoad'},
+    {label:'適用示方書',    key:'designCode'},
+    {label:'橋長',          key:'bridgeLength'},
+    {label:'総径間数',      key:'totalSpans'},
+    {label:'上部構造形式',  key:'superStructure'},
+    {label:'下部構造形式',  key:'subStructure'},
+    {label:'基礎形式',      key:'foundationType'},
+    {label:'点検日',        key:'inspectionDate'},
+    {label:'緯度',          key:'latitude'},
+    {label:'経度',          key:'longitude'},
+    {label:'海岸からの距離', key:'coastalDistance'},
+    {label:'緊急輸送路の指定', key:'emergencyRoute'},
+    {label:'路下条件',      key:'underCondition'},
+  ];
+  document.getElementById('form-shogen').innerHTML = fields.map((f,fi) => `
+    <div class="form-group">
+      <label>${f.label}</label>
+      <input type="text" value="${esc(b[f.key])}"
+        oninput="bridges[${selBridge}]['${f.key}']=this.value">
+    </div>`).join('');
+
+  // ---- 径間タブ ----
+  const spanTabsEl = document.getElementById('span-tabs');
+  if (b.spans.length > 1) {
+    spanTabsEl.innerHTML = b.spans.map((s,i) =>
+      `<span style="cursor:pointer;padding:2px 8px;border-radius:4px;${i===selSpan?'background:#1e3a5f;color:white':'background:#eee;color:#555'}"
+        onclick="selSpan=${i};renderDamageTable(bridges[${selBridge}])">第${s.spanNumber}径間</span> `
+    ).join('');
+  } else {
+    spanTabsEl.innerHTML = '';
+  }
+
+  renderDamageTable(b);
+}
+
+function renderDamageTable(b) {
+  const span = b.spans[selSpan];
+  if (!span) { document.getElementById('damage-table').innerHTML = '<tr><td style="padding:20px;color:#aaa">損傷データなし</td></tr>'; return; }
+
+  // ヘッダー定義
+  const cols = [
+    {h:'部材種別',      type:'label'},
+    {h:'No.',           type:'number'},
+    {h:'腐食',          key:'corrosion',   type:'grade'},
+    {h:'亀裂',          key:'crack',       type:'grade'},
+    {h:'ボルト\n脱落',  key:'boltLoss',    type:'grade'},
+    {h:'破断',          key:'fracture',    type:'grade'},
+    {h:'防食機能\nの劣化', key:'antiCor', type:'grade', isNew:true},
+    {h:'(分類)',        key:'antiCorCls',  type:'text',  isNew:true},
+    {h:'ひびわれ\n漏水',key:'concrete',   type:'grade'},
+    {h:'(パターン)',    key:'concPat',     type:'text'},
+    {h:'鉄筋\n露出',   key:'steelExp',    type:'grade'},
+    {h:'抜け\n落ち',   key:'fallOff',     type:'grade'},
+    {h:'床版\nひびわれ',key:'slabCrack',  type:'grade'},
+    {h:'PC定着\n部異常',key:'pcAnchor',   type:'grade'},
+    {h:'路面\n凹凸',   key:'roadSurf',    type:'grade'},
+    {h:'支承\n機能障害',key:'bearFunc',   type:'grade'},
+    {h:'補修補強\n材損傷',key:'repairDmg',type:'grade', isNew:true},
+    {h:'(分類)',        key:'repairCls',   type:'text',  isNew:true},
+    {h:'沈下\n移動傾斜',key:'settlement', type:'grade', isNew:true},
+    {h:'洗堀',          key:'scour',       type:'grade', isNew:true},
+    {h:'備考',          type:'notes'},
+  ];
+
+  let html = '<thead><tr>';
+  cols.forEach(c => {
+    const s = c.isNew ? 'background:#fdfbea;' : '';
+    html += `<th style="${s}">${c.h.replace(/\n/g,'<br>')}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+
+  let prevType = '';
+  span.members.forEach((m, mi) => {
+    const bi = selBridge;
+    const si = selSpan;
+    const isFirst = m.type !== prevType;
+    if (isFirst) prevType = m.type;
+
+    html += '<tr>';
+    // 部材種別
+    html += `<td class="member-label">${isFirst ? esc(m.type) : '<span style="opacity:0.2">↑</span>'}</td>`;
+    // 部材番号
+    html += `<td>${esc(String(m.number))}</td>`;
+
+    cols.slice(2, -1).forEach(c => {
+      if (c.type === 'notes') return;
+      const val = m.d[c.key];
+      const warn = (c.key==='settlement' && m.d._oldSubWork) || (c.key==='bearFunc' && m.d._hasYuHari);
+      let cls = c.isNew ? 'col-new' : '';
+      if (warn) cls += ' col-new-warn';
+      if (val && !c.isNew && !warn) {
+        const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
+        cls += ' ' + (vmap[val]||'');
+      }
+
+      if (c.type === 'grade') {
+        html += `<td class="${cls}">
+          <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
+            <option value="">-</option>
+            ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
+            ${val==='?'?`<option value="?" selected>?</option>`:''}
+          </select></td>`;
+      } else {
+        html += `<td class="${cls}">
+          <input type="text" value="${esc(val||'')}" style="width:50px"
+            oninput="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null">
+          </td>`;
+      }
+    });
+
+    // 備考
+    html += `<td class="notes-col">
+      <input type="text" value="${esc(m.notes||'')}" style="min-width:120px"
+        oninput="bridges[${bi}].spans[${si}].members[${mi}].notes=this.value">
+      </td>`;
+    html += '</tr>';
+  });
+
+  // その他
+  if (span.others) {
+    html += `<tr>
+      <td class="member-label">その他</td>
+      <td colspan="${cols.length-1}" style="text-align:left;padding:4px 6px">
+        <input type="text" value="${esc(span.others)}" style="width:100%;text-align:left"
+          oninput="bridges[${selBridge}].spans[${selSpan}].others=this.value">
+      </td></tr>`;
+  }
+
+  html += '</tbody>';
+  html += `<tfoot><tr><td colspan="${cols.length}" style="padding:6px 8px;background:#fafafa;font-size:11px;color:#888;text-align:left">
+    ★ 黄地=新テンプレ追加列 ／ 橙地=旧様式「有/無」から変換（要確認） ／ ?=評価区分不明（a〜eを入力してください）
+  </td></tr></tfoot>`;
+
+  document.getElementById('damage-table').innerHTML = html;
+  updateSpanTabs(b);
+}
+
+function updateSpanTabs(b) {
+  const el = document.getElementById('span-tabs');
+  if (b.spans.length <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = b.spans.map((s,i) =>
+    `<span style="cursor:pointer;padding:2px 8px;border-radius:4px;margin-right:4px;${i===selSpan?'background:#1e3a5f;color:white':'background:#eee;color:#555'}"
+      onclick="selSpan=${i};renderDamageTable(bridges[${selBridge}])">第${s.spanNumber}径間</span>`
+  ).join('');
+}
+
+function colorCell(sel) {
+  const td = sel.closest('td');
+  td.className = td.className.replace(/\bval-[abcde]\b/g,'');
+  const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
+  if (vmap[sel.value]) td.classList.add(vmap[sel.value]);
+}
+
+// ============================================================
+// PHOTO TAB
+// ============================================================
+function selectPhotoBridge(i) {
+  selPhoto = i;
+  refreshSidebar('photos');
+  document.getElementById('photo-placeholder').style.display = 'none';
+  document.getElementById('photo-content').style.display = 'block';
+  updatePhotoStatus();
+  renderPhotoGrid();
+}
+
+document.getElementById('btn-photo-folder').addEventListener('click', () =>
+  document.getElementById('photo-folder-input').click());
+
+document.getElementById('photo-folder-input').addEventListener('change', e => {
+  if (selPhoto === -1) return;
+  const b = bridges[selPhoto];
+  b.photos = [];
+  Array.from(e.target.files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const m = file.name.match(/(\d{4})\.\w+$/i);
+    b.photos.push({ file, name: file.name, cam: m?m[1]:null, url: URL.createObjectURL(file), pNo: null });
+  });
+  b.photos.sort((a,z) => (a.cam||'').localeCompare(z.cam||''));
+  updatePhotoStatus();
+  renderPhotoGrid();
+});
+
+function updatePhotoStatus() {
+  if (selPhoto === -1) return;
+  const b    = bridges[selPhoto];
+  const total= b.photos.length;
+  const asn  = b.photos.filter(p=>p.pNo).length;
+  document.getElementById('photo-folder-status').textContent = total ? `${total}枚読み込み済み` : '未選択';
+  document.getElementById('photo-assigned-count').textContent = total ? `割当済み: ${asn}/${total}枚` : '';
+}
+
+function renderPhotoGrid() {
+  if (selPhoto === -1) return;
+  const b    = bridges[selPhoto];
+  const grid = document.getElementById('photo-grid');
+  if (!b.photos.length) {
+    grid.innerHTML = '<div style="color:#aaa;font-size:13px;grid-column:1/-1;text-align:center;padding:20px">写真フォルダを選択してください</div>';
+    renderPhotoLedger();
+    return;
+  }
+  grid.innerHTML = b.photos.map((p,i) => `
+    <div class="thumb ${p.pNo?'assigned':'unassigned'}">
+      <img src="${p.url}" alt="${p.name}" loading="lazy">
+      <div class="thumb-meta">
+        <div class="cam">${p.cam ? 'CAM: ' + p.cam : p.name}</div>
+        <input type="text" placeholder="写真No."
+          value="${p.pNo||''}"
+          oninput="setPhotoNo(${i},this.value)"
+          title="損傷写真台帳の写真番号を入力">
+      </div>
+    </div>`).join('');
+  renderPhotoLedger();
+}
+
+function setPhotoNo(i, val) {
+  bridges[selPhoto].photos[i].pNo = val.trim() || null;
+  const thumbs = document.querySelectorAll('.thumb');
+  if (thumbs[i]) {
+    thumbs[i].className = 'thumb ' + (val.trim() ? 'assigned' : 'unassigned');
+  }
+  updatePhotoStatus();
+  renderPhotoLedger();
+}
+
+function renderPhotoLedger() {
+  if (selPhoto === -1) return;
+  const b       = bridges[selPhoto];
+  const card    = document.getElementById('photo-ledger-card');
+  const tbody   = document.getElementById('photo-ledger-body');
+  const assigned = b.photos.filter(p => p.pNo);
+  if (!assigned.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  tbody.innerHTML = assigned
+    .sort((a,z) => (a.pNo||'').localeCompare(z.pNo||'', undefined, {numeric:true}))
+    .map(p => `
+      <tr>
+        <td>${p.pNo}</td>
+        <td>${p.cam||'-'}</td>
+        <td style="font-size:11px;text-align:left">${p.name}</td>
+        <td><img src="${p.url}" style="height:40px;border-radius:3px"></td>
+      </tr>`).join('');
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function refreshExportSummary() {
+  const el = document.getElementById('export-summary');
+  if (!bridges.length) {
+    el.innerHTML = '<div class="alert alert-warn">インポートされた橋梁データがありません。</div>';
+    return;
+  }
+  const tplWarn = templateWB ? '' : '<div class="alert alert-warn" style="margin-bottom:10px">テンプレが未設定です。セットアップタブで template.xlsx を読み込んでください（未設定の場合は基本形式で出力）。</div>';
+  el.innerHTML = tplWarn + `
+    <div class="alert alert-info"><strong>${bridges.length}橋</strong>をエクスポートします。</div>
+    <div class="bridge-list">
+      ${bridges.map((b,i) => `
+        <div class="bridge-item">
+          <div class="status-icon ${b.spans.length?'si-ok':'si-warn'}">${b.spans.length?'✓':'!'}</div>
+          <div class="bname">${b.name||'(不明)'}</div>
+          <div class="broute">${b.routeName||''}</div>
+          <span class="badge badge-info">径間${b.spans.length}</span>
+          <span class="badge ${b.photos.filter(p=>p.pNo).length?'badge-ok':'badge-warn'}">
+            写真${b.photos.filter(p=>p.pNo).length}/${b.photos.length}枚
+          </span>
+        </div>`).join('')}
+    </div>`;
+}
+
+document.getElementById('btn-export-all').addEventListener('click', exportAll);
+
+async function exportAll() {
+  const logCard = document.getElementById('export-log-card');
+  const logEl   = document.getElementById('export-log');
+  logCard.style.display = 'block';
+  logEl.innerHTML = '';
+
+  const log = (msg, type='') => {
+    const color = {ok:'#6fcf97',warn:'#f2994a',err:'#eb5757'}[type]||'#e0e0e0';
+    logEl.innerHTML += `<div style="color:${color}">[${time()}] ${msg}</div>`;
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  if (!bridges.length) { log('橋梁データがありません', 'err'); return; }
+
+  const zip = new JSZip();
+  log(`エクスポート開始: ${bridges.length}橋`);
+
+  for (const b of bridges) {
+    log(`処理中: ${b.name||'(不明)'} ...`);
+    try {
+      const wb  = templateWB ? buildFromTemplate(b) : buildBasic(b);
+      const buf = XLSX.write(wb, { type:'array', bookType:'xlsx' });
+      const fn  = `${b.managementNumber||'no-id'}_${b.name||'bridge'}(国総研).xlsx`.replace(/[\\/:"*?<>|]/g,'_');
+      zip.file(fn, buf);
+      log(`  完了: ${fn}`, 'ok');
+    } catch(e) {
+      log(`  エラー: ${e.message}`, 'err');
+    }
+  }
+
+  log('ZIP生成中...');
+  const blob = await zip.generateAsync({ type:'blob' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `国総研調書_${ymd()}.zip`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  log('ダウンロード完了', 'ok');
+}
+
+// ============================================================
+// EXCEL BUILDER: テンプレベース
+// ============================================================
+function buildFromTemplate(bridge) {
+  // テンプレを深コピー
+  const wb = { SheetNames: [], Sheets: {}, Props: templateWB.Props };
+  templateWB.SheetNames.forEach(sn => {
+    const src = templateWB.Sheets[sn];
+    wb.SheetNames.push(sn);
+    wb.Sheets[sn] = deepCloneSheet(src);
+  });
+
+  fillShogen(wb, bridge);
+  fillShogen2(wb, bridge);
+  fillKamibuWork(wb, bridge);
+  fillShimobuWork(wb, bridge);
+  fillSpans(wb, bridge);
+
+  return wb;
+}
+
+function deepCloneSheet(ws) {
+  if (!ws) return {};
+  const clone = {};
+  Object.keys(ws).forEach(k => {
+    if (k === '!merges') clone[k] = ws[k].map(m => ({...m, s:{...m.s}, e:{...m.e}}));
+    else if (k === '!cols' || k === '!rows') clone[k] = ws[k] ? [...ws[k]] : ws[k];
+    else if (typeof ws[k] === 'object' && ws[k] !== null) clone[k] = {...ws[k]};
+    else clone[k] = ws[k];
+  });
+  return clone;
+}
+
+// ラベル検索してデータセルを上書き
+function setByLabel(ws, label, value) {
+  if (!ws || value === null || value === undefined || value === '') return false;
+  const ref   = ws['!ref'] || 'A1:AH60';
+  const range = XLSX.utils.decode_range(ref);
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({r,c})];
+      if (!cell || cell.v === null || cell.v === undefined) continue;
+      const cv = String(cell.v).trim();
+      if (cv === label || cv.startsWith(label + '\n') || cv.endsWith('\n' + label)) {
+        // 右方向に最初の値があるセルを上書き
+        for (let dc = 1; dc <= 20; dc++) {
+          const ta  = XLSX.utils.encode_cell({r, c: c+dc});
+          const tc  = ws[ta];
+          if (tc && tc.v !== null && tc.v !== '' && tc.v !== undefined) {
+            tc.v = typeof value === 'number' ? value : String(value);
+            tc.t = typeof value === 'number' ? 'n' : 's';
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function fillShogen(wb, b) {
+  const ws = wb.Sheets['橋梁諸元']; if (!ws) return;
+  setByLabel(ws, '橋梁名',        b.name);
+  setByLabel(ws, '路線名',        b.routeName);
+  setByLabel(ws, '管理者',        b.manager);
+  setByLabel(ws, '架設年度',      b.foundingYear);
+  setByLabel(ws, '活荷重・等級',  b.liveLoad);
+  setByLabel(ws, '適用示方書',    b.designCode);
+  setByLabel(ws, '橋長',          b.bridgeLength);
+  setByLabel(ws, '総径間数',      b.totalSpans);
+  setByLabel(ws, '上部構造形式',  b.superStructure);
+  setByLabel(ws, '下部構造形式',  b.subStructure);
+  setByLabel(ws, '基礎形式',      b.foundationType);
+  setByLabel(ws, '点検日',        b.inspectionDate);
+}
+
+function fillShogen2(wb, b) {
+  const ws = wb.Sheets['橋梁諸元2']; if (!ws) return;
+  setByLabel(ws, '橋梁管理番号', b.managementNumber);
+  setByLabel(ws, '橋梁名称',     b.name);
+  setByLabel(ws, '路線名',       b.routeName);
+  setByLabel(ws, '所在地',       b.locationDetail || b.locationFrom);
+  const bl = parseFloat(b.bridgeLength);
+  if (!isNaN(bl)) setByLabel(ws, '橋長', bl);
+  const sc = parseInt(b.totalSpans);
+  if (!isNaN(sc)) setByLabel(ws, '径間数', sc);
+}
+
+function fillKamibuWork(wb, b) {
+  const ws = wb.Sheets['上部工諸元']; if (!ws || !b.spanInfo.length) return;
+  const si = b.spanInfo[0];
+  setByLabel(ws, '材料区分',   si.materialClass);
+  setByLabel(ws, '構造形式',   si.structureType);
+  setByLabel(ws, '桁本数',     si.girderCount);
+  const sl = parseFloat(si.spanLength);
+  if (!isNaN(sl)) setByLabel(ws, '支間長', sl);
+  setByLabel(ws, '起点側支承種類',    si.startBearing);
+  setByLabel(ws, '終点側支承種類',    si.endBearing);
+  setByLabel(ws, '起点側伸縮装置種類', si.startExpansion);
+  setByLabel(ws, '終点側伸縮装置種類', si.endExpansion);
+}
+
+function fillShimobuWork(wb, b) {
+  const ws = wb.Sheets['下部工諸元']; if (!ws) return;
+  // 既存行を更新
+  const d = s2a(ws);
+  let hdrRow = -1;
+  for (let r = 0; r < d.length; r++) {
+    if (d[r] && d[r][0] === '躯体番号') { hdrRow = r; break; }
+  }
+  if (hdrRow < 0) return;
+  b.subWorks.forEach((sw, i) => {
+    const r   = hdrRow + 1 + i;
+    const a3  = XLSX.utils.encode_cell({r, c: 3});
+    const tc  = ws[a3];
+    if (tc) { tc.v = sw.structureType; tc.t = 's'; }
+  });
+}
+
+// 損傷評価シートへの書き込み
+const DMG_KEYS = ['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','repairDmg','repairCls','settlement','scour'];
+const DMG_COLS = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]; // 0-indexed
+
+function fillSpans(wb, b) {
+  b.spans.forEach(span => {
+    const sheetName = `第${span.spanNumber}径間`;
+    const ws = wb.Sheets[sheetName]; if (!ws) return;
+
+    // データ開始行を探す（部材種別が主桁 or 横桁 or 床版 で始まる行）
+    const d = s2a(ws);
+    let dataStart = -1;
+    for (let r = 0; r < d.length; r++) {
+      const c0 = String(d[r]?.[0]||'').trim();
+      if (['主桁','横桁','床版','下部工','橋台','支承'].includes(c0)) { dataStart = r; break; }
+    }
+    if (dataStart < 0) return;
+
+    // テンプレの既存データ行と対応付け
+    let memberIdx = 0;
+    for (let r = dataStart; r < d.length && memberIdx < span.members.length; r++) {
+      const c1 = d[r]?.[1];
+      if (c1 === null || c1 === undefined || c1 === '') continue;
+
+      const m = span.members[memberIdx++];
+      DMG_KEYS.forEach((key, ki) => {
+        const col = DMG_COLS[ki];
+        const val = m.d[key];
+        if (val === null || val === undefined || val === '?') return;
+        const addr = XLSX.utils.encode_cell({r, c: col});
+        ws[addr] = { v: val, t: 's' };
+      });
+      // 備考
+      if (m.notes) {
+        const na = XLSX.utils.encode_cell({r, c: 20});
+        ws[na] = { v: m.notes, t: 's' };
+      }
+    }
+
+    // その他
+    if (span.others) {
+      for (let r = d.length - 1; r >= dataStart; r--) {
+        if (String(d[r]?.[0]||'').startsWith('その他')) {
+          const a1 = XLSX.utils.encode_cell({r, c: 1});
+          ws[a1] = { v: span.others, t: 's' };
+          break;
+        }
+      }
+    }
+  });
+}
+
+// ============================================================
+// EXCEL BUILDER: テンプレなし（基本形式）
+// ============================================================
+function buildBasic(b) {
+  const wb = XLSX.utils.book_new();
+
+  // 橋梁諸元
+  const shogenRows = [
+    ['橋梁諸元と総合点検結果'],
+    ['橋梁名', b.name, '', '路線名', b.routeName, '', '', '施設ID', b.facilityId],
+    ['所在地(自)', b.locationFrom, '', '', '', '', '', '管理者', b.manager],
+    ['所在地(至)', b.locationTo],
+    ['架設年度', b.foundingYear, '', '活荷重・等級', b.liveLoad, '', '', '適用示方書', b.designCode],
+    ['橋長', b.bridgeLength, '', '総径間数', b.totalSpans, '', '', '点検日', b.inspectionDate],
+    ['上部構造形式', b.superStructure, '', '下部構造形式', b.subStructure, '', '', '基礎形式', b.foundationType],
+    ['緯度', b.latitude, '', '経度', b.longitude],
+    ['海岸からの距離', b.coastalDistance, '', '緊急輸送路の指定', b.emergencyRoute],
+    ['路下条件', b.underCondition],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(shogenRows), '橋梁諸元');
+
+  // 各径間
+  b.spans.forEach(span => {
+    const hdr = ['部材種別','No.','腐食','亀裂','ボルト脱落','破断','防食機能劣化','(分類)','ひびわれ漏水','(パターン)','鉄筋露出','抜落','床版ひびわれ','PC定着部','路面凹凸','支承機能','補修補強材損傷','(分類)','沈下移動傾斜','洗堀','備考'];
+    const rows = [hdr];
+    span.members.forEach(m => {
+      rows.push([m.type, m.number, ...DMG_KEYS.map(k=>m.d[k]||''), m.notes]);
+    });
+    if (span.others) rows.push(['その他', span.others]);
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), `第${span.spanNumber}径間`);
+  });
+
+  return wb;
+}
+
+// ============================================================
+// UTILS
+// ============================================================
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function time() { return new Date().toLocaleTimeString('ja-JP'); }
+function ymd()  { return new Date().toISOString().slice(0,10); }
+
+// ============================================================
+// PDF.js 初期化
+// ============================================================
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ============================================================
+// PDF UI イベント
+// ============================================================
+document.getElementById('btn-pdf-upload').addEventListener('click', () =>
+  document.getElementById('pdf-input').click());
+
+document.getElementById('pdf-input').addEventListener('change', e => {
+  if (selPhoto === -1) { alert('先に橋梁を選択してください'); return; }
+  if (e.target.files[0]) startPdfParse(e.target.files[0]);
+  e.target.value = '';
+});
+
+// ============================================================
+// PDF 解析メイン
+// ============================================================
+let currentMappings = []; // 今回抽出したマッピング
+
+async function startPdfParse(file) {
+  const bridge = bridges[selPhoto];
+  const statusEl  = document.getElementById('pdf-status');
+  const progArea  = document.getElementById('pdf-progress-area');
+  const resultArea= document.getElementById('pdf-result-area');
+  const pbar      = document.getElementById('pdf-pbar');
+  const logEl     = document.getElementById('pdf-log');
+
+  currentMappings = [];
+  resultArea.style.display = 'none';
+  progArea.style.display   = 'block';
+  logEl.innerHTML = '';
+  pbar.style.width = '0%';
+
+  const pdfLog = (msg, type='') => {
+    const color = {warn:'#bf360c', ok:'#2e7d32', err:'#c62828'}[type] || '#555';
+    logEl.innerHTML += `<span style="color:${color}">${msg}</span><br>`;
+  };
+
+  try {
+    pdfLog(`PDF読み込み中: ${file.name}`);
+    statusEl.textContent = '解析中...';
+
+    const buf    = await file.arrayBuffer();
+    const pdfDoc = await pdfjsLib.getDocument({ data: buf }).promise;
+    pdfLog(`${pdfDoc.numPages}ページ検出`);
+    pbar.style.width = '20%';
+
+    // Step1: テキスト抽出を試みる
+    pdfLog('テキスト抽出を試みています...');
+    const { items, totalText } = await extractAllText(pdfDoc, pbar, 20, 70);
+    pbar.style.width = '70%';
+
+    const hasPhotoMark = items.some(i => /写真番号/.test(i.str));
+
+    let mappings;
+    if (hasPhotoMark) {
+      pdfLog(`テキスト抽出成功（${items.length}アイテム）`, 'ok');
+      mappings = parsePhotoMappingsFromItems(items);
+    } else {
+      pdfLog('テキスト抽出で写真番号が見つかりません → OCRで再試行...', 'warn');
+      pbar.style.width = '70%';
+      mappings = await parseWithOCR(pdfDoc, pdfLog, pbar);
+    }
+
+    pbar.style.width = '100%';
+    pdfLog(`抽出完了: ${mappings.length}件`, 'ok');
+
+    currentMappings = mappings;
+    showPdfMappings(mappings, bridge);
+    statusEl.textContent = `${mappings.length}件抽出完了`;
+
+  } catch(e) {
+    pdfLog(`エラー: ${e.message}`, 'err');
+    statusEl.textContent = 'エラー発生';
+    console.error(e);
+  }
+}
+
+// ============================================================
+// テキスト抽出（全ページ）
+// ============================================================
+async function extractAllText(pdfDoc, pbar, progStart, progEnd) {
+  const items     = [];
+  const progRange = progEnd - progStart;
+
+  for (let p = 1; p <= pdfDoc.numPages; p++) {
+    const page     = await pdfDoc.getPage(p);
+    const vp       = page.getViewport({ scale: 1 });
+    const content  = await page.getTextContent();
+
+    content.items.forEach(item => {
+      if (!item.str || !item.str.trim()) return;
+      items.push({
+        str      : item.str,
+        x        : item.transform[4],
+        y        : item.transform[5],      // PDF座標（下=0、上=大）
+        width    : item.width || 0,
+        pageNum  : p,
+        pageH    : vp.height
+      });
+    });
+
+    pbar.style.width = (progStart + progRange * (p / pdfDoc.numPages)) + '%';
+  }
+
+  return { items, totalText: items.map(i => i.str).join(' ') };
+}
+
+// ============================================================
+// テキストアイテムからマッピング抽出
+// ============================================================
+function parsePhotoMappingsFromItems(items) {
+  // ページごとに処理
+  const pages = {};
+  items.forEach(item => {
+    if (!pages[item.pageNum]) pages[item.pageNum] = [];
+    pages[item.pageNum].push(item);
+  });
+
+  const all = [];
+  Object.values(pages).forEach(pageItems => {
+    all.push(...extractFromPageItems(pageItems));
+  });
+  return all;
+}
+
+function extractFromPageItems(items) {
+  // PDF y座標は下=0、上=大 → 降順ソートで上から下の順
+  const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+
+  // ライン単位にグループ化（y差 ≤ 3 を同一行とみなす）
+  const lines = [];
+  for (const item of sorted) {
+    const last = lines[lines.length - 1];
+    if (last && Math.abs(last.refY - item.y) <= 3) {
+      last.items.push(item);
+    } else {
+      lines.push({ refY: item.y, items: [item] });
+    }
+  }
+  lines.forEach(l => l.items.sort((a, b) => a.x - b.x));
+
+  const results = [];
+
+  lines.forEach((line, li) => {
+    // 写真番号を含む行を探す
+    const allStr = line.items.map(i => i.str).join('');
+    if (!/写真番号/.test(allStr)) return;
+
+    // Fix1: 行内の全ての写真番号アイテムを個別に処理
+    const photoItems = line.items.filter(i => /写真番号/.test(i.str));
+
+    photoItems.forEach(pItem => {
+      // pItemより右側のアイテムを収集（次の写真番号アイテムの直前まで）
+      const rightItems = [];
+      let pastPItem = false;
+      for (const item of line.items) {
+        if (item === pItem) { pastPItem = true; continue; }
+        if (!pastPItem) continue;
+        if (/写真番号/.test(item.str)) break;
+        rightItems.push(item);
+      }
+
+      const combined = rightItems.map(i => i.str).join(' ');
+      const fullStr  = pItem.str + ' ' + combined;
+
+      // パターン: 写真番号-N  CAMNUM  または  写真番号-N,M  CAM1,CAM2
+      const m = fullStr.match(
+        /写真番号[-−ー](\d+(?:[,，]\d+)*)[\s　]+(\d[\d,，]*)/
+      );
+
+      let photoNums, camNums;
+
+      if (m) {
+        photoNums = m[1].split(/[,，]/).map(s => s.trim()).filter(Boolean);
+        camNums   = m[2].split(/[,，]/).map(s => s.trim()).filter(Boolean);
+      } else {
+        const pOnly = fullStr.match(/写真番号[-−ー](\d+(?:[,，]\d+)*)/);
+        if (!pOnly) return;
+        photoNums = pOnly[1].split(/[,，]/).map(s => s.trim()).filter(Boolean);
+
+        // 同行の右側に数字列があれば使う
+        let camCandidate = rightItems.find(i => /^\s*[\d,，]+\s*$/.test(i.str));
+
+        // Fix3: なければ近傍ライン（y差25以内・下方向）を探す
+        if (!camCandidate) {
+          for (let ni = li + 1; ni < Math.min(lines.length, li + 5); ni++) {
+            const nearLine = lines[ni];
+            if (pItem.y - nearLine.refY > 25) break;
+            const nearItem = nearLine.items.find(i =>
+              Math.abs(i.x - pItem.x) < 250 && /^\s*[\d,，]+\s*$/.test(i.str)
+            );
+            if (nearItem) { camCandidate = nearItem; break; }
+          }
+        }
+
+        if (!camCandidate) return;
+        camNums = camCandidate.str.split(/[,，]/).map(s => s.trim()).filter(Boolean);
+      }
+
+      if (!photoNums.length || !camNums.length) return;
+
+      // Fix2: x座標フィルタリング付きでコンテキスト取得
+      const ctx = findContext(li, lines, pItem.x);
+
+      photoNums.forEach((pNum, idx) => {
+        const rawCam = camNums[Math.min(idx, camNums.length - 1)];
+        const cam4   = rawCam.replace(/\D/g, '').slice(-4).padStart(4, '0');
+        results.push({
+          photoNumber : pNum,
+          camSuffix   : cam4,
+          memberName  : ctx.memberName,
+          damageType  : ctx.damageType
+        });
+      });
+    });
+  });
+
+  return results;
+}
+
+// 前後ラインから部材名・損傷種類を取得（Fix2: x座標±150でフィルタリング）
+function findContext(lineIdx, lines, refX) {
+  let memberName = '';
+  const dmgTypes = [];
+
+  for (let i = lineIdx - 1; i >= Math.max(0, lineIdx - 10); i--) {
+    // 全アイテムの文字列（写真番号チェック用）
+    const fullStr = lines[i].items.map(t => t.str).join('');
+
+    // 別の写真番号行に達したら終了
+    if (/写真番号/.test(fullStr)) break;
+
+    // x座標が近いアイテムのみ対象（±150）
+    const nearItems = lines[i].items.filter(t => Math.abs(t.x - refX) < 150);
+    if (!nearItems.length) continue;
+
+    const lStr = nearItems.map(t => t.str).join('').trim();
+    if (!lStr) continue;
+
+    // 部材名：行末が「:」「：」
+    if (/[:：]\s*$/.test(lStr) && !memberName) {
+      memberName = lStr.replace(/[:：]\s*$/, '').trim();
+
+    // 損傷種類：2桁数字始まりまたは「-A〜E」を含む
+    } else if (/^\d{2}/.test(lStr) || /[-−][A-E][\s(（]/.test(lStr) || /[-−][A-E]$/.test(lStr)) {
+      dmgTypes.unshift(lStr);
+    }
+  }
+
+  return { memberName, damageType: dmgTypes.join(' / ') };
+}
+
+// ============================================================
+// OCR フォールバック（Tesseract.js 遅延ロード）
+// ============================================================
+async function parseWithOCR(pdfDoc, pdfLog, pbar) {
+  pdfLog('Tesseract.js を読み込み中（初回は時間がかかります）...');
+
+  // 遅延ロード
+  if (!window.Tesseract) {
+    await loadScript('https://unpkg.com/tesseract.js@4/dist/tesseract.min.js');
+  }
+  pdfLog('Tesseract.js 読み込み完了');
+
+  const worker = await Tesseract.createWorker({
+    logger: m => {
+      if (m.status === 'recognizing text') {
+        pbar.style.width = (70 + m.progress * 25) + '%';
+      }
+    }
+  });
+  await worker.loadLanguage('jpn');
+  await worker.initialize('jpn');
+
+  const allLines = [];
+
+  for (let p = 1; p <= pdfDoc.numPages; p++) {
+    pdfLog(`OCR: ${p}/${pdfDoc.numPages}ページ目...`);
+    const page     = await pdfDoc.getPage(p);
+    const viewport = page.getViewport({ scale: 2.5 }); // 高解像度
+
+    const canvas  = document.createElement('canvas');
+    canvas.width  = viewport.width;
+    canvas.height = viewport.height;
+    const ctx     = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+
+    const { data: { text } } = await worker.recognize(canvas);
+    allLines.push(...text.split('\n').map(l => l.trim()).filter(Boolean));
+  }
+
+  await worker.terminate();
+
+  // OCRテキストからマッピング抽出
+  return parseOCRLines(allLines);
+}
+
+function parseOCRLines(lines) {
+  const results = [];
+
+  lines.forEach((line, i) => {
+    // ノイズ補正：OCRは「写真番号」を「写真番号」「写真 番号」等と読む可能性がある
+    const normalized = line.replace(/写\s*真\s*番\s*号/, '写真番号')
+                           .replace(/[-ー−]\s*/, '-');
+
+    const m = normalized.match(
+      /写真番号-(\d+(?:[,，]\d+)*)[\s　]+([\d,，]+)/
+    );
+    if (!m) return;
+
+    const photoNums = m[1].split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    const camNums   = m[2].split(/[,，]/).map(s => s.trim()).filter(Boolean);
+    if (!camNums.length) return;
+
+    // 前の行から部材名・損傷種類を探す（OCRは行順なので単純に遡る）
+    let memberName = '';
+    const dmgTypes = [];
+    for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+      const prev = lines[j].trim();
+      if (/写真番号/.test(prev)) break;
+      if (/[:：]\s*$/.test(prev) && !memberName) {
+        memberName = prev.replace(/[:：]\s*$/, '').trim();
+      } else if (/^\d{2}/.test(prev) || /[-−][A-E]/.test(prev)) {
+        dmgTypes.unshift(prev);
+      }
+    }
+
+    photoNums.forEach((pNum, idx) => {
+      const rawCam = camNums[Math.min(idx, camNums.length - 1)];
+      const cam4   = rawCam.replace(/\D/g, '').slice(-4).padStart(4, '0');
+      results.push({
+        photoNumber : pNum,
+        camSuffix   : cam4,
+        memberName,
+        damageType  : dmgTypes.join(' / ')
+      });
+    });
+  });
+
+  return results;
+}
+
+// ============================================================
+// マッピング結果表示
+// ============================================================
+function showPdfMappings(mappings, bridge) {
+  const resultArea = document.getElementById('pdf-result-area');
+  const summaryEl  = document.getElementById('pdf-match-summary');
+  const tbody      = document.getElementById('pdf-map-body');
+
+  resultArea.style.display = 'block';
+
+  let matched = 0;
+  tbody.innerHTML = mappings.map(m => {
+    // 写真フォルダとの照合
+    const photo = bridge.photos.find(p => p.cam === m.camSuffix);
+    const matchCell = photo
+      ? `<span class="match-ok">✓ ${photo.name}</span>`
+      : `<span class="match-ng">写真フォルダに未マッチ（${m.camSuffix}）</span>`;
+    if (photo) matched++;
+
+    return `<tr>
+      <td style="padding:5px 6px;border:1px solid #dce0e8;text-align:center;font-weight:600">${esc(m.photoNumber)}</td>
+      <td style="padding:5px 6px;border:1px solid #dce0e8;text-align:center">${esc(m.camSuffix)}</td>
+      <td style="padding:5px 6px;border:1px solid #dce0e8">${esc(m.memberName)}</td>
+      <td style="padding:5px 6px;border:1px solid #dce0e8;font-size:11px">${esc(m.damageType)}</td>
+      <td style="padding:5px 6px;border:1px solid #dce0e8;font-size:11px">${matchCell}</td>
+    </tr>`;
+  }).join('');
+
+  summaryEl.textContent =
+    `${mappings.length}件抽出 ／ 写真フォルダとマッチ: ${matched}件`;
+}
+
+// ============================================================
+// 自動割当を適用
+// ============================================================
+function applyAllMappings() {
+  if (selPhoto === -1 || !currentMappings.length) return;
+  const bridge = bridges[selPhoto];
+  let applied = 0;
+
+  currentMappings.forEach(m => {
+    const photo = bridge.photos.find(p => p.cam === m.camSuffix);
+    if (photo) {
+      photo.pNo = m.photoNumber;
+      applied++;
+    }
+  });
+
+  alert(`${applied}枚の写真に写真番号を割り当てました。`);
+  updatePhotoStatus();
+  renderPhotoGrid();
+  // マッピング表も更新
+  showPdfMappings(currentMappings, bridge);
+}
+
+// ============================================================
+// SUPABASE STATE
+// ============================================================
+const SB_URL = 'https://twolywmokxggjnugzuig.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
+
+let supabaseClient = null;
+let currentUser    = null;
+
+// ============================================================
+// SUPABASE 初期化・認証
+// ============================================================
+function initSupabase() {
+  const url = localStorage.getItem('sb_url');
+  const key = localStorage.getItem('sb_key');
+  if (!url || !key) return false;
+  supabaseClient = supabase.createClient(url, key);
+  return true;
+}
+
+function saveSupabaseConfig() {
+  const url = document.getElementById('sb-url').value.trim();
+  const key = document.getElementById('sb-key').value.trim();
+  if (!url || !key) { alert('URLとキーを入力してください'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  initSupabase();
+  document.getElementById('sb-save-status').textContent = '✓ 保存しました。ログインしてください。';
+  document.getElementById('login-config-hint').style.display = 'none';
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass  = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+
+  if (!supabaseClient && !initSupabase()) {
+    errEl.textContent = 'Supabaseが未設定です。セットアップタブで設定してください。';
+    return;
+  }
+
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+  if (error) { errEl.textContent = error.message; return; }
+
+  onLogin(data.user);
+}
+
+async function doLogout() {
+  if (supabaseClient) await supabaseClient.auth.signOut();
+  currentUser = null;
+  bridges = [];
+  selBridge = -1; selPhoto = -1;
+  document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('header-user-email').textContent = '';
+  document.getElementById('btn-logout').style.display = 'none';
+}
+
+function onLogin(user) {
+  currentUser = user;
+  document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('header-user-email').textContent = user.email;
+  document.getElementById('btn-logout').style.display = 'block';
+  loadBridgesFromSupabase();
+}
+
+// ============================================================
+// SUPABASE データ操作
+// ============================================================
+async function loadBridgesFromSupabase() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from('bridges')
+    .select('id, name, management_number, data, updated_at')
+    .order('updated_at', { ascending: false });
+  if (error) { console.error('load bridges:', error); return; }
+
+  bridges = data.map(row => {
+    const b = row.data || {};
+    b._sbId = row.id;
+    b._approvals = [];
+    return b;
+  });
+
+  await loadAllApprovals();
+  refreshSidebar('review');
+  refreshSidebar('photos');
+  refreshExportSummary();
+}
+
+async function loadAllApprovals() {
+  if (!supabaseClient) return;
+  const { data, error } = await supabaseClient
+    .from('approvals').select('*').order('approved_at', { ascending: false });
+  if (error) { console.error('load approvals:', error); return; }
+
+  bridges.forEach(b => {
+    b._approvals = b._sbId ? data.filter(a => a.bridge_id === b._sbId) : [];
+  });
+}
+
+function bridgePayload(bridge) {
+  // File オブジェクトはJSONに入れられないので写真URLは除外
+  const b = {...bridge};
+  b.photos = (b.photos || []).map(p => ({
+    name: p.name, cam: p.cam, pNo: p.pNo
+  }));
+  delete b._approvals;
+  return b;
+}
+
+async function saveBridgeToSupabase(bridge) {
+  if (!supabaseClient || !currentUser) return null;
+
+  const payload = {
+    management_number: bridge.managementNumber || null,
+    name: bridge.name || null,
+    data: bridgePayload(bridge),
+    created_by: currentUser.id,
+    updated_at: new Date().toISOString()
+  };
+
+  if (bridge._sbId) {
+    const { error } = await supabaseClient
+      .from('bridges').update(payload).eq('id', bridge._sbId);
+    if (error) { console.error('update bridge:', error); return null; }
+    return bridge._sbId;
+  } else {
+    const { data, error } = await supabaseClient
+      .from('bridges').insert(payload).select('id').single();
+    if (error) { console.error('insert bridge:', error); return null; }
+    bridge._sbId = data.id;
+    return data.id;
+  }
+}
+
+async function saveCurrentBridge() {
+  if (selBridge < 0 || !currentUser) return;
+  const st = document.getElementById('save-status');
+  st.textContent = '保存中...';
+  const id = await saveBridgeToSupabase(bridges[selBridge]);
+  st.textContent = id ? `✓ 保存完了 ${new Date().toLocaleTimeString('ja-JP')}` : '✗ 保存に失敗しました';
+}
+
+async function approveBridge(bi) {
+  if (bi < 0 || !currentUser) return;
+  const bridge = bridges[bi];
+
+  if (!bridge._sbId) {
+    const id = await saveBridgeToSupabase(bridge);
+    if (!id) { alert('保存に失敗しました'); return; }
+  }
+
+  const notes = prompt(`「${bridge.name}」を是認します。\nコメント（省略可）`) ?? null;
+  if (notes === null) return; // キャンセル
+
+  const { error } = await supabaseClient.from('approvals').insert({
+    bridge_id : bridge._sbId,
+    user_id   : currentUser.id,
+    user_email: currentUser.email,
+    notes     : notes || null
+  });
+
+  if (error) { alert('是認に失敗しました: ' + error.message); return; }
+
+  await loadAllApprovals();
+  renderApprovalStatus(bi);
+  alert(`「${bridge.name}」を是認しました`);
+}
+
+function renderApprovalStatus(bi) {
+  if (bi < 0) return;
+  const bridge   = bridges[bi];
+  const approvals = bridge._approvals || [];
+  const inlineEl  = document.getElementById('approval-status-inline');
+  const histEl    = document.getElementById('approval-history');
+  const listEl    = document.getElementById('approval-list');
+  if (!inlineEl) return;
+
+  if (approvals.length) {
+    const latest = approvals[0];
+    inlineEl.innerHTML = `<span class="approval-ok">✓ 是認済み ${latest.user_email} (${new Date(latest.approved_at).toLocaleDateString('ja-JP')})</span>`;
+    histEl.style.display = 'block';
+    listEl.innerHTML = approvals.map(a =>
+      `<li>✓ ${a.user_email}　${new Date(a.approved_at).toLocaleString('ja-JP')}${a.notes ? '　' + a.notes : ''}</li>`
+    ).join('');
+  } else {
+    inlineEl.innerHTML = '<span class="approval-no">未是認</span>';
+    histEl.style.display = 'none';
+  }
+}
+
+// ============================================================
+// 初期化（ページロード時）
+// ============================================================
+window.addEventListener('load', () => {
+  // デフォルト値（未設定の場合は組み込みのURLとキーを使用）
+  const url = localStorage.getItem('sb_url') || SB_URL;
+  const key = localStorage.getItem('sb_key') || SB_KEY;
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  document.getElementById('sb-url').value = url;
+  document.getElementById('sb-key').value = key;
+
+  if (initSupabase()) {
+    document.getElementById('login-config-hint').style.display = 'none';
+    // 既存セッション確認
+    supabaseClient.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        onLogin(session.user);
+      }
+    });
+    // 認証状態変化を監視
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+      if (!session && currentUser) doLogout();
+    });
+  }
+});
+
+// ============================================================
+// スクリプト動的ロード
+// ============================================================
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s  = document.createElement('script');
+    s.src    = src;
+    s.onload = resolve;
+    s.onerror= reject;
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>
