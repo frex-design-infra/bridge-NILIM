@@ -1908,7 +1908,25 @@ window.addEventListener('load', () => {
 
   initSupabase();
   loadBridgesFromSupabase();
+  autoLoadTemplate();
 });
+
+async function autoLoadTemplate() {
+  try {
+    const res = await fetch('template.xlsx');
+    if (!res.ok) return;
+    const buf = await res.arrayBuffer();
+    templateWB = XLSX.read(buf, { type: 'array' });
+    document.getElementById('template-status').innerHTML =
+      `<div class="alert alert-ok">テンプレ読み込み完了（標準テンプレ）</div>`;
+    templateDrop.style.borderColor = '#2e7d32';
+    templateDrop.style.background  = '#f0fdf4';
+    templateDrop.querySelector('div:not(.hint):not(.icon)').textContent =
+      '標準テンプレ設定済み（クリックで差し替え）';
+  } catch(e) {
+    // ローカル環境ではスキップ
+  }
+}
 
 // ============================================================
 // スクリプト動的ロード
