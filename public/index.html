@@ -154,6 +154,17 @@ td.notes-col input { text-align: left; }
 /* 評価対象外セル */
 td.col-na { background: #e8e8e8; cursor: default; }
 
+/* 諸元コンボボックス */
+.combo-wrap { position: relative; display: flex; gap: 2px; }
+.combo-input { flex: 1; min-width: 0; }
+.combo-btn { width: 26px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; font-size: 12px; color: #555; padding: 0; flex-shrink: 0; }
+.combo-btn:hover { background: #ddd; }
+.combo-list { display: none; position: absolute; top: 100%; left: 0; right: 26px; max-height: 220px; overflow-y: auto; background: white; border: 1px solid #b0b8c8; border-radius: 4px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 200; }
+.combo-item { padding: 5px 10px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+.combo-item:hover { background: #f0f4ff; }
+.combo-item.combo-selected { background: #dbe8ff; font-weight: 600; }
+.combo-item.combo-hidden { display: none; }
+
 /* SQLコードブロック */
 .sql-block { background: #1a1a2e; color: #a8d8a8; border-radius: 6px; padding: 12px 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; max-height: 220px; overflow-y: auto; }
 </style>
@@ -722,9 +733,9 @@ function renderReview(b) {
     {label:'管理者',        key:'manager'},
     {label:'架設年度',      key:'foundingYear'},
     {label:'活荷重・等級',  key:'liveLoad', opts:[
-      'B活荷重','A活荷重','L活荷重','T-20（旧）','TT-43（旧）','P活荷重（歩道橋）']},
+      '不明','B活荷重','A活荷重','L活荷重','T-20（旧）','TT-43（旧）','P活荷重（歩道橋）']},
     {label:'適用示方書',    key:'designCode', opts:[
-      '道路橋示方書（令和2年）','道路橋示方書（平成24年）','道路橋示方書（平成14年）',
+      '不明','道路橋示方書（令和2年）','道路橋示方書（平成24年）','道路橋示方書（平成14年）',
       '道路橋示方書（平成8年）','道路橋示方書（昭和55年）','道路橋示方書（昭和39年）',
       '旧道路橋示方書（昭和24年以前）']},
     {label:'橋長',          key:'bridgeLength'},
@@ -757,23 +768,45 @@ function renderReview(b) {
       '重力式橋台','逆T式橋台','U型橋台','控え壁式橋台',
       '柱式橋脚','壁式橋脚','ラーメン式橋脚','張り出し式橋脚']},
     {label:'基礎形式',      key:'foundationType', opts:[
-      '直接基礎',
+      '不明','直接基礎',
       '杭基礎（鋼管杭）','杭基礎（RC杭）','杭基礎（PHC杭）',
       '杭基礎（場所打ちコンクリート杭）','杭基礎（鋼管ソイルセメント）',
       'ケーソン基礎（オープン）','ケーソン基礎（ニューマチック）','鋼管矢板基礎']},
     {label:'点検日',        key:'inspectionDate'},
     {label:'緯度',          key:'latitude'},
     {label:'経度',          key:'longitude'},
-    {label:'海岸からの距離', key:'coastalDistance'},
-    {label:'緊急輸送路の指定', key:'emergencyRoute'},
-    {label:'路下条件',      key:'underCondition'},
+    {label:'海岸からの距離', key:'coastalDistance', opts:[
+      '50m未満','50m以上100m未満','100m以上200m未満',
+      '200m以上500m未満','500m以上1000m未満','1000m以上']},
+    {label:'緊急輸送路の指定', key:'emergencyRoute', opts:[
+      '不明','第1次緊急輸送路','第2次緊急輸送路','第3次緊急輸送路','指定なし']},
+    {label:'路下条件',      key:'underCondition', opts:[
+      '道路（一般道路）','道路（高速道路）','鉄道','河川','海・湖沼','その他','なし']},
   ];
+  // インポート値をリストの最近似値に自動マッチ
+  fields.filter(f => f.opts).forEach(f => {
+    const raw = b[f.key];
+    if (!raw) return;
+    const matched = fuzzyMatchOpts(raw, f.opts);
+    if (matched !== raw) bridges[selBridge][f.key] = matched;
+  });
   document.getElementById('form-shogen').innerHTML = fields.map(f => {
-    const val = esc(b[f.key]);
-    const dl  = f.opts ? `<datalist id="dl-${f.key}">${f.opts.map(o=>`<option value="${o}">`).join('')}</datalist>` : '';
-    const inp = `<input type="text"${f.opts?` list="dl-${f.key}"`:''}
-        value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value">`;
-    return `<div class="form-group"><label>${f.label}</label>${inp}${dl}</div>`;
+    const val = esc(bridges[selBridge][f.key] || b[f.key] || '');
+    if (!f.opts) {
+      return `<div class="form-group"><label>${f.label}</label><input type="text" value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value"></div>`;
+    }
+    const items = f.opts.map(o =>
+      `<div class="combo-item${o===bridges[selBridge][f.key]?' combo-selected':''}" data-val="${esc(o)}"
+        onmousedown="pickCombo('${f.key}',${selBridge},this.dataset.val,event)">${esc(o)}</div>`
+    ).join('');
+    return `<div class="form-group"><label>${f.label}</label>
+      <div class="combo-wrap">
+        <input type="text" class="combo-input" id="ci-${f.key}" value="${val}"
+          oninput="bridges[${selBridge}]['${f.key}']=this.value;filterCombo('${f.key}',this.value)"
+          onfocus="openCombo('${f.key}')" onblur="closeComboDelay('${f.key}')">
+        <button type="button" class="combo-btn" onclick="toggleCombo('${f.key}')">▾</button>
+        <div class="combo-list" id="cl-${f.key}">${items}</div>
+      </div></div>`;
   }).join('');
 
   // ---- 径間タブ ----
@@ -1201,6 +1234,80 @@ const DMG_COLS = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]; // 0-indexed
 // ============================================================
 // 部材種別ごとの評価対象外列（国総研要領）
 // ============================================================
+// ============================================================
+// コンボボックス操作
+// ============================================================
+function openCombo(key) {
+  const cl = document.getElementById('cl-'+key);
+  if (cl) cl.style.display = 'block';
+}
+function closeComboDelay(key) {
+  setTimeout(() => {
+    const cl = document.getElementById('cl-'+key);
+    if (cl) cl.style.display = 'none';
+  }, 200);
+}
+function toggleCombo(key) {
+  const cl = document.getElementById('cl-'+key);
+  if (!cl) return;
+  if (cl.style.display === 'block') {
+    cl.style.display = 'none';
+  } else {
+    cl.querySelectorAll('.combo-item').forEach(it => it.classList.remove('combo-hidden'));
+    cl.style.display = 'block';
+    const ci = document.getElementById('ci-'+key);
+    if (ci) ci.focus();
+  }
+}
+function filterCombo(key, val) {
+  const cl = document.getElementById('cl-'+key);
+  if (!cl) return;
+  const q = val.toLowerCase();
+  cl.querySelectorAll('.combo-item').forEach(it => {
+    it.classList.toggle('combo-hidden', q.length > 0 && !it.dataset.val.toLowerCase().includes(q));
+  });
+  cl.style.display = 'block';
+}
+function pickCombo(key, bi, val, e) {
+  e.preventDefault();
+  const ci = document.getElementById('ci-'+key);
+  if (ci) ci.value = val;
+  bridges[bi][key] = val;
+  const cl = document.getElementById('cl-'+key);
+  if (cl) {
+    cl.style.display = 'none';
+    cl.querySelectorAll('.combo-item').forEach(it => {
+      it.classList.toggle('combo-selected', it.dataset.val === val);
+    });
+  }
+}
+
+// ============================================================
+// インポート値 → リスト最近似値マッチ
+// ============================================================
+function fuzzyMatchOpts(val, opts) {
+  if (!val || !opts || !opts.length) return val;
+  const v = val.trim();
+  if (opts.includes(v)) return v;
+  const normalize = s => s.replace(/[・\-\s（）()橋]/g, '').toLowerCase();
+  const vn = normalize(v);
+  if (vn.length < 2) return v;
+  let bestOpt = null, bestScore = 0;
+  for (const opt of opts) {
+    const on = normalize(opt);
+    let maxLen = 0;
+    for (let len = Math.min(vn.length, on.length); len >= 2; len--) {
+      let found = false;
+      for (let i = 0; i <= vn.length - len; i++) {
+        if (on.includes(vn.slice(i, i + len))) { found = true; break; }
+      }
+      if (found) { maxLen = len; break; }
+    }
+    if (maxLen > bestScore) { bestScore = maxLen; bestOpt = opt; }
+  }
+  return (bestScore >= 3) ? bestOpt : v;
+}
+
 // 【適用ルール】道路橋定期点検要領（国交省・国総研）準拠
 // 鋼材系損傷: 腐食・亀裂・ボルト脱落・破断・防食機能の劣化
 // コンクリート系損傷: ひびわれ漏水・鉄筋露出・抜け落ち
