@@ -270,6 +270,7 @@ td.col-na { background: #e8e8e8; cursor: default; }
             <div class="legend-item"><div class="legend-color" style="background:#fde8d0;border-color:#f5a623"></div>要確認（有/無から変換）</div>
             <div class="legend-item"><div class="legend-color" style="background:#fde8e8;border-color:#e00"></div>e（最大損傷）</div>
           </div>
+          <div id="repair-check-area" style="display:none;margin:4px 0 10px"></div>
           <div style="overflow-x:auto">
             <table id="damage-table"></table>
           </div>
@@ -549,6 +550,8 @@ function parseOldExcel(wb, filename) {
     subWorks: [],
     // 損傷
     spans: [],
+    // 補修補強材の損傷チェック（デフォルト false = グレーアウト）
+    hasRepair: false,
     // 写真
     photos: []
   };
@@ -1133,6 +1136,21 @@ function renderDamageTable(b) {
   const span = b.spans[selSpan];
   if (!span) { document.getElementById('damage-table').innerHTML = '<tr><td style="padding:20px;color:#aaa">損傷データなし</td></tr>'; return; }
 
+  // ⑬補修・補強材の損傷 チェックボックス描画
+  const bi = selBridge;
+  const rca = document.getElementById('repair-check-area');
+  rca.style.display = 'block';
+  rca.innerHTML = `
+    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;
+      padding:6px 14px;border-radius:6px;font-size:13px;border:1px solid ${b.hasRepair?'#c8a000':'#dce0e8'};
+      background:${b.hasRepair?'#fdfbea':'#f5f6fa'}">
+      <input type="checkbox" ${b.hasRepair?'checked':''}
+        onchange="toggleRepair(${bi},this.checked)"
+        style="width:15px;height:15px;cursor:pointer;accent-color:#c8a000">
+      <span style="font-weight:600">⑬ 補修・補強材の損傷</span>
+      <span style="font-size:11px;color:#999">チェックなし＝グレーアウト（デフォルト）</span>
+    </label>`;
+
   // ヘッダー定義
   // type:'grade'    = a〜e の5段階評価（要領p.6 表-3.1: ①腐食 ⑤防食機能 ⑥ひびわれ漏水 ⑨床版ひびわれ）
   // type:'grade-ae' = a,e のみ（要領p.6 表-3.1: それ以外の11損傷種別）
@@ -1198,6 +1216,12 @@ function renderDamageTable(b) {
       if (val && !c.isNew && !warn) {
         const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
         cls += ' ' + (vmap[val]||'');
+      }
+
+      // ⑬補修補強材: hasRepair フラグがOFFのときはグレーアウト（チェックボックス連動）
+      if ((c.key === 'repairDmg' || c.key === 'repairCls') && !b.hasRepair) {
+        html += `<td class="col-na" title="補修・補強材の損傷 ─ 上のチェックをONにすると入力できます"></td>`;
+        return;
       }
 
       if (c.type === 'grade') {
@@ -1313,6 +1337,12 @@ function colorCell(sel) {
   td.className = td.className.replace(/\bval-[abcde]\b/g,'');
   const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
   if (vmap[sel.value]) td.classList.add(vmap[sel.value]);
+}
+
+// ⑬補修・補強材の損傷チェックボックス切り替え → テーブル再描画
+function toggleRepair(bi, checked) {
+  bridges[bi].hasRepair = checked;
+  renderDamageTable(bridges[bi]);
 }
 
 // ⑥ひびわれ漏水 — concrete 変更時に concPat セルを連動更新（要領p.14）
