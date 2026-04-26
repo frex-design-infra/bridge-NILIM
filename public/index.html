@@ -727,6 +727,19 @@ function parseSpan(data, spanNum) {
     }
   }
 
+  // 沈下移動傾斜・洗堀: 評価対象の部材で値が未設定 かつ 備考に関連語句がなければ デフォルト a
+  // （実務上ほぼ a。備考に「沈下」「移動」「傾斜」「洗堀」があれば手動入力を促すため null 維持）
+  span.members.forEach(m => {
+    const naSet = getNACols(m.type);
+    const notes = m.notes || '';
+    if (!naSet.has('settlement') && (m.d.settlement === null || m.d.settlement === undefined)) {
+      m.d.settlement = /沈下|移動|傾斜/.test(notes) ? null : 'a';
+    }
+    if (!naSet.has('scour') && (m.d.scour === null || m.d.scour === undefined)) {
+      m.d.scour = /洗堀|洗掘/.test(notes) ? null : 'a';
+    }
+  });
+
   return span;
 }
 
