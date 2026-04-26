@@ -165,6 +165,11 @@ td.col-na { background: #e8e8e8; cursor: default; }
 .combo-item.combo-selected { background: #dbe8ff; font-weight: 600; }
 .combo-item.combo-hidden { display: none; }
 
+/* 業務グループヘッダー */
+.gyomu-group-hdr { font-size:11px; font-weight:700; color:#1e3a5f; padding:10px 6px 4px; border-bottom:2px solid #5dade2; margin-bottom:4px; margin-top:8px; letter-spacing:0.3px; display:flex; align-items:center; gap:6px; }
+.gyomu-group-hdr:first-child { margin-top:0; }
+.gyomu-badge { background:#e3f2fd; color:#1565c0; border-radius:8px; padding:1px 7px; font-size:10px; }
+
 /* SQLコードブロック */
 .sql-block { background: #1a1a2e; color: #a8d8a8; border-radius: 6px; padding: 12px 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; max-height: 220px; overflow-y: auto; }
 </style>
@@ -191,6 +196,11 @@ td.col-na { background: #e8e8e8; cursor: default; }
 <div id="tab-import" class="content active">
   <div class="card">
     <h2>過年度点検ファイルのインポート</h2>
+    <div class="form-group" style="margin-bottom:14px;max-width:480px">
+      <label>業務名 <span style="font-weight:400;color:#aaa">（このバッチに適用。後から変更可）</span></label>
+      <input type="text" id="gyomu-name-input" placeholder="例：〇〇市 令和6年度 道路橋定期点検業務"
+        style="padding:7px 10px;border:1px solid #dce0e8;border-radius:5px;font-size:13px;font-family:inherit;width:100%">
+    </div>
     <p style="color:#666;font-size:13px;margin-bottom:14px">
       過年度点検Excel（.xls / .xlsx）を複数ドロップまたは選択してください。
     </p>
@@ -414,6 +424,7 @@ function processImport(files) {
       try {
         const wb     = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
         const bridge = parseOldExcel(wb, file.name);
+        bridge.gyomuName = (document.getElementById('gyomu-name-input').value || '').trim();
         bridges.push(bridge);
         list.insertAdjacentHTML('beforeend', `
           <div class="bridge-item">
@@ -444,6 +455,7 @@ function processImport(files) {
 function parseOldExcel(wb, filename) {
   const b = {
     filename,
+    gyomuName: '',   // 業務名（インポート時に設定）
     name: '', routeName: '', managementNumber: '', facilityId: '',
     locationFrom: '', locationTo: '',
     manager: '', foundingYear: '', liveLoad: '', designCode: '',
@@ -698,12 +710,30 @@ function refreshSidebar(tab) {
     el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">橋梁データなし</div>';
     return;
   }
+
+  // 業務名でグループ化（順序を保持するためにMap使用）
+  const groups = new Map();
   bridges.forEach((b, i) => {
-    const item = document.createElement('div');
-    item.className = 'bridge-item' + (i === sel ? ' selected' : '');
-    item.innerHTML = `<div><div class="bname">${b.name||'(不明)'}</div><div class="broute">${b.routeName||''}</div></div>`;
-    item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
-    el.appendChild(item);
+    const g = b.gyomuName || '（業務未設定）';
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g).push({ b, i });
+  });
+
+  groups.forEach((items, gName) => {
+    // グループヘッダー
+    const hdr = document.createElement('div');
+    hdr.className = 'gyomu-group-hdr';
+    hdr.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(gName)}">${esc(gName)}</span><span class="gyomu-badge">${items.length}橋</span>`;
+    el.appendChild(hdr);
+
+    // 橋梁アイテム
+    items.forEach(({ b, i }) => {
+      const item = document.createElement('div');
+      item.className = 'bridge-item' + (i === sel ? ' selected' : '');
+      item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
+      item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
+      el.appendChild(item);
+    });
   });
 }
 
@@ -724,6 +754,7 @@ function renderReview(b) {
 
   // ---- 橋梁諸元フォーム ----
   const fields = [
+    {label:'業務名',        key:'gyomuName'},
     {label:'橋梁名',        key:'name'},
     {label:'路線名',        key:'routeName'},
     {label:'橋梁管理番号',  key:'managementNumber'},
@@ -825,7 +856,7 @@ function renderReview(b) {
       '鋼管杭基礎','既製RC杭基礎','既製PC杭基礎',
       '木ぐい基礎',
       'その他（PCウェル・PHC・SC杭等）']},
-    {label:'点検日',        key:'inspectionDate'},
+    {label:'点検日',        key:'inspectionDate', type:'date'},
     {label:'緯度',          key:'latitude'},
     {label:'経度',          key:'longitude'},
     {label:'海岸からの距離(km)', key:'coastalDistance', opts:[
@@ -848,6 +879,16 @@ function renderReview(b) {
   });
   document.getElementById('form-shogen').innerHTML = fields.map(f => {
     const val = esc(bridges[selBridge][f.key] || b[f.key] || '');
+    if (f.type === 'date') {
+      // YYYY-MM-DD形式に正規化（スラッシュ・和暦等が混在する場合に備えて生値もフォールバック）
+      const raw = bridges[selBridge][f.key] || b[f.key] || '';
+      const dateVal = raw.replace(/\//g, '-').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
+      return `<div class="form-group"><label>${f.label}</label>
+        <input type="date" value="${esc(dateVal)}"
+          oninput="bridges[${selBridge}]['${f.key}']=this.value"
+          style="padding:6px 9px;border:1px solid #dce0e8;border-radius:5px;font-size:13px;font-family:inherit;width:100%">
+      </div>`;
+    }
     if (!f.opts) {
       return `<div class="form-group"><label>${f.label}</label><input type="text" value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value"></div>`;
     }
