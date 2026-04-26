@@ -1178,7 +1178,17 @@ function renderDamageTable(b) {
     {h:'備考',          type:'notes'},
   ];
 
-  let html = '<thead><tr>';
+  // グループヘッダー行
+  const gs = 'text-align:center;font-size:11px;font-weight:700;border:1px solid #dce0e8;padding:4px 2px;letter-spacing:0.3px;';
+  let html = `<thead>
+    <tr>
+      <th colspan="2" style="${gs}background:#f0f2f5;"></th>
+      <th colspan="6" style="${gs}background:#dbeafe;color:#1e40af;">🔩 鋼部材の損傷</th>
+      <th colspan="6" style="${gs}background:#d1fae5;color:#065f46;">🧱 コンクリート部材の損傷</th>
+      <th colspan="6" style="${gs}background:#fef3c7;color:#78350f;">🔗 共通・その他</th>
+      <th colspan="1" style="${gs}background:#f0f2f5;"></th>
+    </tr>
+    <tr>`;
   cols.forEach(c => {
     const s = c.isNew ? 'background:#fdfbea;' : '';
     html += `<th style="${s}">${c.h.replace(/\n/g,'<br>')}</th>`;
