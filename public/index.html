@@ -151,6 +151,9 @@ td.notes-col input { text-align: left; }
 .approval-list { margin-top: 8px; font-size: 12px; }
 .approval-list li { padding: 3px 0; color: #555; list-style: none; }
 
+/* 評価対象外セル */
+td.col-na { background: #e8e8e8; cursor: default; }
+
 /* SQLコードブロック */
 .sql-block { background: #1a1a2e; color: #a8d8a8; border-radius: 6px; padding: 12px 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; max-height: 220px; overflow-y: auto; }
 </style>
@@ -802,9 +805,18 @@ function renderDamageTable(b) {
     // 部材番号
     html += `<td>${esc(String(m.number))}</td>`;
 
+    const naSet = getNACols(m.type);
+
     cols.slice(2, -1).forEach(c => {
       if (c.type === 'notes') return;
       const val = m.d[c.key];
+
+      // 評価対象外 → グレー
+      if (naSet.has(c.key)) {
+        html += `<td class="col-na" title="この部材種別では評価対象外"></td>`;
+        return;
+      }
+
       const warn = (c.key==='settlement' && m.d._oldSubWork) || (c.key==='bearFunc' && m.d._hasYuHari);
       let cls = c.isNew ? 'col-new' : '';
       if (warn) cls += ' col-new-warn';
@@ -1151,6 +1163,40 @@ function fillShimobuWork(wb, b) {
 // 損傷評価シートへの書き込み
 const DMG_KEYS = ['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','repairDmg','repairCls','settlement','scour'];
 const DMG_COLS = [2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]; // 0-indexed
+
+// ============================================================
+// 部材種別ごとの評価対象外列（国総研要領）
+// ============================================================
+const NA_RULES = [
+  { // 上部工（鋼）
+    match: /主桁|横桁|縦桁|対傾構|横構|アーチ|ケーブル|主塔|補剛桁/,
+    na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour'])
+  },
+  { // 床版
+    match: /床版/,
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','roadSurf','bearFunc','settlement','scour'])
+  },
+  { // 支承
+    match: /支承/,
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','settlement','scour'])
+  },
+  { // 下部工（橋台・橋脚）
+    match: /橋台|橋脚|基礎|躯体/,
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc'])
+  },
+  { // 路面
+    match: /路面|舗装/,
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','bearFunc','settlement','scour'])
+  },
+];
+
+function getNACols(memberType) {
+  if (!memberType) return new Set();
+  for (const rule of NA_RULES) {
+    if (rule.match.test(memberType)) return rule.na;
+  }
+  return new Set();
+}
 
 function fillSpans(wb, b) {
   b.spans.forEach(span => {
