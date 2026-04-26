@@ -1218,8 +1218,10 @@ function renderDamageTable(b) {
             </select></td>`;
         } else {
           // a〜e の5段階評価（通常）
+          // ⑥ひびわれ漏水の場合: 変更時に concPat セルを連動更新
+          const extraFn = c.key === 'concrete' ? `;updateConcPatCell(${bi},${si},${mi})` : '';
           html += `<td class="${cls}">
-            <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
+            <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)${extraFn}">
               <option value="">-</option>
               ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
               ${val==='?'?`<option value="?" selected>?</option>`:''}
@@ -1238,6 +1240,21 @@ function renderDamageTable(b) {
             ${hasInvalid?`<option value="${val}" selected style="color:red">${val}(!)</option>`:''}
             ${val==='?'?`<option value="?" selected>?</option>`:''}
           </select></td>`;
+      } else if (c.key === 'concPat') {
+        // ⑥ひびわれ漏水 — パターン列: concrete が a/未設定の場合はグレーアウト（要領p.14）
+        // b以上のときのみパターン番号を記録（①〜㉗ を手入力）
+        const concVal = m.d.concrete || '';
+        const needsPat = concVal && concVal !== 'a';
+        if (!needsPat) {
+          html += `<td id="concpat-td-${bi}-${si}-${mi}" class="col-na"
+            title="ひびわれ漏水がaまたは未評価のためパターン不要"></td>`;
+        } else {
+          html += `<td id="concpat-td-${bi}-${si}-${mi}" class="${cls}">
+            <input type="text" value="${esc(val||'')}" style="width:44px;text-align:center" placeholder="番号"
+              title="要領p.14 パターン①〜㉗を入力"
+              oninput="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null">
+          </td>`;
+        }
       } else if (c.key === 'antiCorCls') {
         // ⑤防食機能の劣化 — 分類セレクト（変更時 antiCor セレクトを連動更新）
         const clsOpts = [{v:'',l:'—'},{v:'1',l:'1:塗装'},{v:'2',l:'2:めっき・金属溶射'},{v:'3',l:'3:耐候性鋼材'}];
@@ -1296,6 +1313,29 @@ function colorCell(sel) {
   td.className = td.className.replace(/\bval-[abcde]\b/g,'');
   const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
   if (vmap[sel.value]) td.classList.add(vmap[sel.value]);
+}
+
+// ⑥ひびわれ漏水 — concrete 変更時に concPat セルを連動更新（要領p.14）
+// concrete = a/未設定 → パターン列をグレーアウト・値クリア
+// concrete = b〜e    → パターン列を活性化（テキスト入力）
+function updateConcPatCell(bi, si, mi) {
+  const m       = bridges[bi].spans[si].members[mi];
+  const concVal = m.d.concrete || '';
+  const needsPat = concVal && concVal !== 'a';
+  const td = document.getElementById(`concpat-td-${bi}-${si}-${mi}`);
+  if (!td) return;
+  if (needsPat) {
+    td.className = td.className.replace(/\bcol-na\b/g,'').trim();
+    td.title = '';
+    td.innerHTML = `<input type="text" value="${(m.d.concPat||'')}" style="width:44px;text-align:center" placeholder="番号"
+      title="要領p.14 パターン①〜㉗を入力"
+      oninput="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null">`;
+  } else {
+    m.d.concPat = null;  // 値クリア
+    td.className = (td.className + ' col-na').trim();
+    td.title = 'ひびわれ漏水がaまたは未評価のためパターン不要';
+    td.innerHTML = '';
+  }
 }
 
 // ⑤防食機能の劣化 — 分類別の有効評価区分（要領p.11-13）
