@@ -1161,13 +1161,30 @@ function renderDamageTable(b) {
       }
 
       if (c.type === 'grade') {
-        // a〜e の5段階評価
-        html += `<td class="${cls}">
-          <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
-            <option value="">-</option>
-            ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
-            ${val==='?'?`<option value="?" selected>?</option>`:''}
-          </select></td>`;
+        if (c.key === 'antiCor') {
+          // ⑤防食機能の劣化: 分類（antiCorCls）に連動してオプション変更
+          const acopts  = getAntiCorOpts(m.d.antiCorCls || '');
+          const acInvalid = val && !acopts.includes(val) && val !== '?';
+          const acCls   = (cls || '') + (acInvalid ? ' col-new-warn' : '') +
+                          (val && !acInvalid ? ` val-${val}` : '');
+          const clsLbl  = {'1':'分類1（塗装）','2':'分類2（めっき・金属溶射）','3':'分類3（耐候性鋼材）'}[m.d.antiCorCls||''] || '';
+          html += `<td class="${acCls.trim()}" title="${acInvalid ? clsLbl+'ではこの区分は対象外です' : ''}">
+            <select id="anticor-${bi}-${si}-${mi}"
+              onchange="bridges[${bi}].spans[${si}].members[${mi}].d.antiCor=this.value||null;colorCell(this)">
+              <option value="">-</option>
+              ${acopts.map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
+              ${acInvalid?`<option value="${val}" selected style="color:red">${val}(!)</option>`:''}
+              ${val==='?'?`<option value="?" selected>?</option>`:''}
+            </select></td>`;
+        } else {
+          // a〜e の5段階評価（通常）
+          html += `<td class="${cls}">
+            <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
+              <option value="">-</option>
+              ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
+              ${val==='?'?`<option value="?" selected>?</option>`:''}
+            </select></td>`;
+        }
       } else if (c.type === 'grade-ae') {
         // a,e のみ（要領p.6 表-3.1: 亀裂・ボルト脱落・破断・鉄筋露出・抜け落ち・PC定着部異常・路面凹凸・支承機能障害・補修補強材損傷・沈下移動傾斜・洗堀）
         // 旧データにb/c/dが入っている場合は警告色で表示
@@ -1180,6 +1197,14 @@ function renderDamageTable(b) {
             <option value="e"${val==='e'?' selected':''}>e</option>
             ${hasInvalid?`<option value="${val}" selected style="color:red">${val}(!)</option>`:''}
             ${val==='?'?`<option value="?" selected>?</option>`:''}
+          </select></td>`;
+      } else if (c.key === 'antiCorCls') {
+        // ⑤防食機能の劣化 — 分類セレクト（変更時 antiCor セレクトを連動更新）
+        const clsOpts = [{v:'',l:'—'},{v:'1',l:'1:塗装'},{v:'2',l:'2:めっき・金属溶射'},{v:'3',l:'3:耐候性鋼材'}];
+        html += `<td class="${c.isNew ? 'col-new' : ''}">
+          <select id="anticorcls-${bi}-${si}-${mi}" style="font-size:11px;width:100%"
+            onchange="bridges[${bi}].spans[${si}].members[${mi}].d.antiCorCls=this.value||null;updateAntiCorSelect(${bi},${si},${mi})">
+            ${clsOpts.map(o=>`<option value="${o.v}"${(val||'')===(o.v)?' selected':''}>${o.l}</option>`).join('')}
           </select></td>`;
       } else {
         html += `<td class="${cls}">
@@ -1231,6 +1256,40 @@ function colorCell(sel) {
   td.className = td.className.replace(/\bval-[abcde]\b/g,'');
   const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
   if (vmap[sel.value]) td.classList.add(vmap[sel.value]);
+}
+
+// ⑤防食機能の劣化 — 分類別の有効評価区分（要領p.11-13）
+// 分類1: 塗装         → a, c, d, e（b なし）
+// 分類2: めっき・金属溶射 → a, c, e（b, d なし）
+// 分類3: 耐候性鋼材   → a〜e（全段階）
+// 未選択              → a〜e（全段階を表示）
+function getAntiCorOpts(clsVal) {
+  if (clsVal === '1') return ['a','c','d','e'];
+  if (clsVal === '2') return ['a','c','e'];
+  return ['a','b','c','d','e'];
+}
+
+// antiCorCls 変更時に antiCor セレクトのオプションを動的更新
+function updateAntiCorSelect(bi, si, mi) {
+  const m    = bridges[bi].spans[si].members[mi];
+  const cls  = m.d.antiCorCls || '';
+  const val  = m.d.antiCor   || '';
+  const opts = getAntiCorOpts(cls);
+  const sel  = document.getElementById(`anticor-${bi}-${si}-${mi}`);
+  if (!sel) return;
+  const invalid = val && !opts.includes(val) && val !== '?';
+  sel.innerHTML = `<option value="">-</option>` +
+    opts.map(o => `<option value="${o}"${val===o?' selected':''}>${o}</option>`).join('') +
+    (invalid ? `<option value="${val}" selected style="color:red">${val}(!)</option>` : '') +
+    (val==='?' ? `<option value="?" selected>?</option>` : '');
+  const td = sel.closest('td');
+  if (td) {
+    td.className = td.className.replace(/\bcol-new-warn\b|\bval-[a-e]\b/g,' ').trim();
+    if (invalid) td.classList.add('col-new-warn');
+    if (val && !invalid) td.classList.add(`val-${val}`);
+    const lbl = {'1':'分類1（塗装）','2':'分類2（めっき・金属溶射）','3':'分類3（耐候性鋼材）'}[cls] || '';
+    td.title = invalid ? `${lbl}ではこの評価区分は対象外です` : '';
+  }
 }
 
 // ============================================================
