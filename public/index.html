@@ -181,7 +181,7 @@ td.col-na { background: #e8e8e8; cursor: default; }
 .combo-item.combo-hidden { display: none; }
 
 /* 業務カードグリッド（インポートタブ） */
-.gyomu-card-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px,1fr)); gap:14px; }
+.gyomu-card-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px,420px)); gap:18px; justify-content:center; }
 .gyomu-card { border:1px solid #dce0e8; border-radius:8px; overflow:hidden; background:white; display:flex; flex-direction:column; }
 .gyomu-card-head { background:#1e3a5f; color:white; padding:10px 14px; display:flex; align-items:center; gap:6px; }
 .gyomu-card-head .gname { flex:1; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -189,7 +189,7 @@ td.col-na { background: #e8e8e8; cursor: default; }
 .gyomu-bridge-mini-list { flex:1; max-height:180px; overflow-y:auto; margin-bottom:8px; }
 .gyomu-bridge-mini { display:flex; align-items:center; gap:5px; padding:3px 0; font-size:12px; color:#555; border-bottom:1px solid #f4f5f7; }
 .gyomu-bridge-mini .bm-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.gyomu-drop-zone { border:2px dashed #ccd0d9; border-radius:6px; padding:14px; text-align:center; cursor:pointer; color:#aaa; font-size:12px; transition:all 0.2s; }
+.gyomu-drop-zone { border:2px dashed #ccd0d9; border-radius:8px; padding:36px 20px; text-align:center; cursor:pointer; color:#aaa; font-size:13px; transition:all 0.2s; letter-spacing:0.3px; }
 .gyomu-drop-zone:hover, .gyomu-drop-zone.dragover { border-color:#5dade2; background:#eef7fd; color:#1e3a5f; }
 
 /* サイドバー・アコーディオン */
@@ -487,7 +487,9 @@ function renderGyomuCards() {
           ondragleave="this.classList.remove('dragover')"
           ondrop="handleGyomuDrop(event,'${g.id}')"
           onclick="document.getElementById('gfile-${g.id}').click()">
-          📂 Excelをドロップ／クリックして選択
+          <div style="font-size:28px;margin-bottom:8px">📂</div>
+          <div style="font-size:13px;font-weight:600;color:#888">Excelをドロップ</div>
+          <div style="font-size:11px;color:#bbb;margin-top:4px">またはクリックしてファイルを選択</div>
           <input type="file" id="gfile-${g.id}" accept=".xlsx,.xls" multiple style="display:none"
             onchange="handleGyomuFiles(this.files,'${g.id}');this.value=''">
         </div>
