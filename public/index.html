@@ -165,10 +165,23 @@ td.col-na { background: #e8e8e8; cursor: default; }
 .combo-item.combo-selected { background: #dbe8ff; font-weight: 600; }
 .combo-item.combo-hidden { display: none; }
 
-/* 業務グループヘッダー */
-.gyomu-group-hdr { font-size:11px; font-weight:700; color:#1e3a5f; padding:10px 6px 4px; border-bottom:2px solid #5dade2; margin-bottom:4px; margin-top:8px; letter-spacing:0.3px; display:flex; align-items:center; gap:6px; }
-.gyomu-group-hdr:first-child { margin-top:0; }
-.gyomu-badge { background:#e3f2fd; color:#1565c0; border-radius:8px; padding:1px 7px; font-size:10px; }
+/* 業務カードグリッド（インポートタブ） */
+.gyomu-card-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(290px,1fr)); gap:14px; }
+.gyomu-card { border:1px solid #dce0e8; border-radius:8px; overflow:hidden; background:white; display:flex; flex-direction:column; }
+.gyomu-card-head { background:#1e3a5f; color:white; padding:10px 14px; display:flex; align-items:center; gap:6px; }
+.gyomu-card-head .gname { flex:1; font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gyomu-card-body { padding:10px 12px; flex:1; display:flex; flex-direction:column; }
+.gyomu-bridge-mini-list { flex:1; max-height:180px; overflow-y:auto; margin-bottom:8px; }
+.gyomu-bridge-mini { display:flex; align-items:center; gap:5px; padding:3px 0; font-size:12px; color:#555; border-bottom:1px solid #f4f5f7; }
+.gyomu-bridge-mini .bm-name { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.gyomu-drop-zone { border:2px dashed #ccd0d9; border-radius:6px; padding:14px; text-align:center; cursor:pointer; color:#aaa; font-size:12px; transition:all 0.2s; }
+.gyomu-drop-zone:hover, .gyomu-drop-zone.dragover { border-color:#5dade2; background:#eef7fd; color:#1e3a5f; }
+
+/* サイドバー・アコーディオン */
+.gyomu-acc-hdr { display:flex; align-items:center; gap:5px; padding:7px 6px 5px; font-size:11px; font-weight:700; color:#1e3a5f; border-bottom:2px solid #5dade2; margin-bottom:2px; cursor:pointer; user-select:none; }
+.gyomu-acc-hdr:hover { background:#f0f7ff; border-radius:4px 4px 0 0; }
+.gyomu-acc-section { margin-bottom:6px; }
+.gyomu-badge { background:#e3f2fd; color:#1565c0; border-radius:8px; padding:1px 7px; font-size:10px; flex-shrink:0; }
 
 /* SQLコードブロック */
 .sql-block { background: #1a1a2e; color: #a8d8a8; border-radius: 6px; padding: 12px 14px; font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.7; overflow-x: auto; white-space: pre; max-height: 220px; overflow-y: auto; }
@@ -195,25 +208,15 @@ td.col-na { background: #e8e8e8; cursor: default; }
 <!-- ===== インポート ===== -->
 <div id="tab-import" class="content active">
   <div class="card">
-    <h2>過年度点検ファイルのインポート</h2>
-    <div class="form-group" style="margin-bottom:14px;max-width:480px">
-      <label>業務名 <span style="font-weight:400;color:#aaa">（このバッチに適用。後から変更可）</span></label>
-      <input type="text" id="gyomu-name-input" placeholder="例：〇〇市 令和6年度 道路橋定期点検業務"
-        style="padding:7px 10px;border:1px solid #dce0e8;border-radius:5px;font-size:13px;font-family:inherit;width:100%">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #eee">
+      <h2 style="margin-bottom:0;border-bottom:none;padding-bottom:0">業務管理</h2>
+      <button class="btn btn-primary" onclick="promptAddGyomu()">＋ 業務を追加</button>
     </div>
-    <p style="color:#666;font-size:13px;margin-bottom:14px">
-      過年度点検Excel（.xls / .xlsx）を複数ドロップまたは選択してください。
-    </p>
-    <div class="drop-zone" id="import-drop">
-      <div class="icon">📂</div>
-      <div>Excelファイルをドロップ、またはクリックして選択</div>
-      <div class="hint">複数ファイル同時OK</div>
-      <input type="file" id="import-input" accept=".xlsx,.xls" multiple style="display:none">
+    <div id="gyomu-cards" class="gyomu-card-grid">
+      <div style="color:#aaa;text-align:center;padding:48px;font-size:13px;grid-column:1/-1">
+        「＋ 業務を追加」から業務を作成し、Excelをドロップしてください
+      </div>
     </div>
-  </div>
-  <div class="card" id="import-results" style="display:none">
-    <h2>インポート結果</h2>
-    <div id="import-list" class="bridge-list"></div>
   </div>
 </div>
 
@@ -358,11 +361,15 @@ td.col-na { background: #e8e8e8; cursor: default; }
 // ============================================================
 // STATE
 // ============================================================
-let templateWB = null;       // テンプレworkbook
-let bridges    = [];         // BridgeData[]
-let selBridge  = -1;         // 確認タブ選択中
-let selPhoto   = -1;         // 写真タブ選択中
-let selSpan    = 0;          // 確認タブ選択径間
+let templateWB  = null;      // テンプレworkbook
+let gyomuList   = [];        // [{id, name}]  業務マスタ
+let bridges     = [];        // BridgeData[]  bridge.gyomuId で業務に紐付け
+let selBridge   = -1;        // 確認タブ選択中
+let selPhoto    = -1;        // 写真タブ選択中
+let selSpan     = 0;         // 確認タブ選択径間
+let _accExpanded = {};       // サイドバーアコーディオン開閉状態 {gyomuId: bool}
+
+function genId() { return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 
 // ============================================================
 // ブラウザのデフォルトドロップ動作を無効化
@@ -399,50 +406,102 @@ function loadTemplate(file) {
 }
 
 // ============================================================
-// IMPORT
+// 業務管理
 // ============================================================
-const importDrop  = document.getElementById('import-drop');
-const importInput = document.getElementById('import-input');
+function promptAddGyomu() {
+  const name = prompt('業務名を入力してください\n例：〇〇市 令和6年度 道路橋定期点検業務');
+  if (!name || !name.trim()) return;
+  const id = genId();
+  gyomuList.push({ id, name: name.trim() });
+  _accExpanded[id] = true;
+  renderGyomuCards();
+}
 
-importDrop.addEventListener('click', () => importInput.click());
-importDrop.addEventListener('dragover',  e => { e.preventDefault(); importDrop.classList.add('dragover'); });
-importDrop.addEventListener('dragleave', () => importDrop.classList.remove('dragover'));
-importDrop.addEventListener('drop', e => {
-  e.preventDefault(); importDrop.classList.remove('dragover');
-  processImport(e.dataTransfer.files);
-});
-importInput.addEventListener('change', e => processImport(e.target.files));
+function renameGyomu(id) {
+  const g = gyomuList.find(x => x.id === id);
+  if (!g) return;
+  const name = prompt('業務名を変更してください', g.name);
+  if (!name || !name.trim()) return;
+  g.name = name.trim();
+  renderGyomuCards();
+  ['review','photos'].forEach(t => {
+    if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
+  });
+}
 
-function processImport(files) {
-  const results = document.getElementById('import-results');
-  const list    = document.getElementById('import-list');
-  results.style.display = 'block';
+function deleteGyomu(id) {
+  const g = gyomuList.find(x => x.id === id);
+  const count = bridges.filter(b => b.gyomuId === id).length;
+  if (!confirm(`「${g?.name}」を削除しますか？\n（読込済み橋梁データ ${count} 件も削除されます）`)) return;
+  gyomuList = gyomuList.filter(x => x.id !== id);
+  bridges   = bridges.filter(b => b.gyomuId !== id);
+  delete _accExpanded[id];
+  renderGyomuCards();
+  ['review','photos'].forEach(t => refreshSidebar(t));
+}
 
+function renderGyomuCards() {
+  const el = document.getElementById('gyomu-cards');
+  if (!gyomuList.length) {
+    el.innerHTML = '<div style="color:#aaa;text-align:center;padding:48px;font-size:13px;grid-column:1/-1">「＋ 業務を追加」から業務を作成し、Excelをドロップしてください</div>';
+    return;
+  }
+  el.innerHTML = gyomuList.map(g => {
+    const gb = bridges.filter(b => b.gyomuId === g.id);
+    const rows = gb.length
+      ? gb.map(b => `<div class="gyomu-bridge-mini">
+          <div class="status-icon si-ok" style="width:14px;height:14px;font-size:9px;flex-shrink:0">✓</div>
+          <span class="bm-name">${esc(b.name||'(名称不明)')}</span>
+          <span style="color:#bbb;font-size:11px;flex-shrink:0">${b.spans.length}径間</span>
+        </div>`).join('')
+      : '<div style="color:#bbb;font-size:12px;text-align:center;padding:12px">橋梁未登録</div>';
+    return `
+    <div class="gyomu-card">
+      <div class="gyomu-card-head">
+        <span class="gname" title="${esc(g.name)}">${esc(g.name)}</span>
+        <span style="font-size:11px;opacity:0.7;flex-shrink:0">${gb.length}橋</span>
+        <button onclick="renameGyomu('${g.id}')" style="background:rgba(255,255,255,0.15);border:none;color:white;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;margin-left:6px">名前変更</button>
+        <button onclick="deleteGyomu('${g.id}')" style="background:rgba(200,40,40,0.55);border:none;color:white;border-radius:3px;padding:2px 8px;cursor:pointer;font-size:11px;margin-left:4px">削除</button>
+      </div>
+      <div class="gyomu-card-body">
+        <div class="gyomu-bridge-mini-list">${rows}</div>
+        <div class="gyomu-drop-zone" id="gdrop-${g.id}"
+          ondragover="event.preventDefault();this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="handleGyomuDrop(event,'${g.id}')"
+          onclick="document.getElementById('gfile-${g.id}').click()">
+          📂 Excelをドロップ／クリックして選択
+          <input type="file" id="gfile-${g.id}" accept=".xlsx,.xls" multiple style="display:none"
+            onchange="handleGyomuFiles(this.files,'${g.id}');this.value=''">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function handleGyomuDrop(e, gyomuId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  handleGyomuFiles(e.dataTransfer.files, gyomuId);
+}
+
+function handleGyomuFiles(files, gyomuId) {
   Array.from(files).forEach(file => {
+    if (!file.name.match(/\.xlsx?$/i)) return;
     const reader = new FileReader();
     reader.onload = ev => {
       try {
         const wb     = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
         const bridge = parseOldExcel(wb, file.name);
-        bridge.gyomuName = (document.getElementById('gyomu-name-input').value || '').trim();
+        bridge.gyomuId = gyomuId;
         bridges.push(bridge);
-        list.insertAdjacentHTML('beforeend', `
-          <div class="bridge-item">
-            <div class="status-icon si-ok">✓</div>
-            <div>
-              <div class="bname">${bridge.name || '(橋梁名不明)'}</div>
-              <div class="broute">${bridge.routeName || ''} ／ ${file.name}</div>
-            </div>
-            <span class="badge badge-ok">完了</span>
-            <span class="badge badge-info">${bridge.spans.length}径間</span>
-          </div>`);
+        renderGyomuCards();
+        // 確認・写真タブが開いていればサイドバーも更新
+        ['review','photos'].forEach(t => {
+          if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
+        });
       } catch(err) {
-        list.insertAdjacentHTML('beforeend', `
-          <div class="bridge-item" style="border-color:#ffcdd2">
-            <div class="status-icon si-err">✗</div>
-            <div class="bname">${file.name}</div>
-            <span class="badge" style="background:#ffebee;color:#c62828">${err.message}</span>
-          </div>`);
+        alert(`読込エラー: ${file.name}\n${err.message}`);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -455,7 +514,7 @@ function processImport(files) {
 function parseOldExcel(wb, filename) {
   const b = {
     filename,
-    gyomuName: '',   // 業務名（インポート時に設定）
+    gyomuId: '',     // 業務ID（gyomuList[].id を参照）
     name: '', routeName: '', managementNumber: '', facilityId: '',
     locationFrom: '', locationTo: '',
     manager: '', foundingYear: '', liveLoad: '', designCode: '',
@@ -706,34 +765,52 @@ function refreshSidebar(tab) {
   const el  = document.getElementById(tab + '-sidebar');
   const sel = tab === 'review' ? selBridge : selPhoto;
   el.innerHTML = '';
+
   if (!bridges.length) {
-    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">橋梁データなし</div>';
+    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">インポートタブで橋梁を読込んでください</div>';
     return;
   }
 
-  // 業務名でグループ化（順序を保持するためにMap使用）
-  const groups = new Map();
+  // gyomuListの順序でグループ化、未設定は末尾
+  const grouped = new Map(); // gyomuId → {name, items:[]}
+  gyomuList.forEach(g => grouped.set(g.id, { name: g.name, items: [] }));
+
   bridges.forEach((b, i) => {
-    const g = b.gyomuName || '（業務未設定）';
-    if (!groups.has(g)) groups.set(g, []);
-    groups.get(g).push({ b, i });
+    const gid = b.gyomuId || '__none__';
+    if (!grouped.has(gid)) grouped.set(gid, { name: '（業務未設定）', items: [] });
+    grouped.get(gid).items.push({ b, i });
   });
 
-  groups.forEach((items, gName) => {
-    // グループヘッダー
-    const hdr = document.createElement('div');
-    hdr.className = 'gyomu-group-hdr';
-    hdr.innerHTML = `<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(gName)}">${esc(gName)}</span><span class="gyomu-badge">${items.length}橋</span>`;
-    el.appendChild(hdr);
+  grouped.forEach((group, gid) => {
+    if (!group.items.length) return; // 橋梁のない業務は表示しない
 
-    // 橋梁アイテム
-    items.forEach(({ b, i }) => {
-      const item = document.createElement('div');
-      item.className = 'bridge-item' + (i === sel ? ' selected' : '');
-      item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
-      item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
-      el.appendChild(item);
-    });
+    // デフォルト展開
+    if (_accExpanded[gid] === undefined) _accExpanded[gid] = true;
+    const isOpen = _accExpanded[gid];
+
+    const section = document.createElement('div');
+    section.className = 'gyomu-acc-section';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'gyomu-acc-hdr';
+    hdr.innerHTML = `
+      <span style="font-size:10px;flex-shrink:0">${isOpen ? '▼' : '▶'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(group.name)}">${esc(group.name)}</span>
+      <span class="gyomu-badge">${group.items.length}橋</span>`;
+    hdr.onclick = () => { _accExpanded[gid] = !_accExpanded[gid]; refreshSidebar(tab); };
+    section.appendChild(hdr);
+
+    if (isOpen) {
+      group.items.forEach(({ b, i }) => {
+        const item = document.createElement('div');
+        item.className = 'bridge-item' + (i === sel ? ' selected' : '');
+        item.style.paddingLeft = '18px';
+        item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
+        item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
+        section.appendChild(item);
+      });
+    }
+    el.appendChild(section);
   });
 }
 
@@ -754,7 +831,6 @@ function renderReview(b) {
 
   // ---- 橋梁諸元フォーム ----
   const fields = [
-    {label:'業務名',        key:'gyomuName'},
     {label:'橋梁名',        key:'name'},
     {label:'路線名',        key:'routeName'},
     {label:'橋梁管理番号',  key:'managementNumber'},
@@ -877,7 +953,18 @@ function renderReview(b) {
     const matched = fuzzyMatchOpts(raw, f.opts);
     if (matched !== raw) bridges[selBridge][f.key] = matched;
   });
-  document.getElementById('form-shogen').innerHTML = fields.map(f => {
+  // 業務選択（フォームの先頭に独立して表示）
+  const gyomuSelectHtml = `
+    <div class="form-group" style="grid-column:1/-1;background:#f0f7ff;border:1px solid #b0cce8;border-radius:6px;padding:8px 12px;">
+      <label style="color:#1e3a5f">所属業務</label>
+      <select id="gyomu-sel-${selBridge}" onchange="bridges[${selBridge}].gyomuId=this.value;renderGyomuCards();refreshSidebar('review')"
+        style="padding:5px 8px;border:1px solid #b0cce8;border-radius:4px;font-size:13px;font-family:inherit;background:white">
+        <option value="">（未設定）</option>
+        ${gyomuList.map(g=>`<option value="${esc(g.id)}"${bridges[selBridge].gyomuId===g.id?' selected':''}>${esc(g.name)}</option>`).join('')}
+      </select>
+    </div>`;
+
+  document.getElementById('form-shogen').innerHTML = gyomuSelectHtml + fields.map(f => {
     const val = esc(bridges[selBridge][f.key] || b[f.key] || '');
     if (f.type === 'date') {
       // YYYY-MM-DD形式に正規化（スラッシュ・和暦等が混在する場合に備えて生値もフォールバック）
