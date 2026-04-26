@@ -1692,8 +1692,9 @@ const NA_RULES = [
   // RC床版・床版（材料不明を含む）（⑥〜⑨◎、鋼材系①〜⑤・⑩外）
   { match: /床版/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 橋台・橋脚・躯体（常にRC: ⑥〜⑧・⑭・⑮◎、鋼材系①〜⑤外）
-  { match: /橋台|橋脚|躯体/,
+  // 下部工・橋台・橋脚・躯体（常にRC: ⑥〜⑧・⑭・⑮◎、鋼材系①〜⑤外）
+  // ※ テンプレートの部材種別は「下部工」で記載（橋台・橋脚は番号で区別）
+  { match: /下部工|橋台|橋脚|躯体/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc']) },
   // 基礎・杭・フーチング（⑭沈下・⑮洗堀・⑬補修のみ対象）
   { match: /基礎|杭|フーチング/,
