@@ -163,98 +163,18 @@ td.notes-col input { text-align: left; }
 </header>
 
 <div class="tabs">
-  <div class="tab active"   data-tab="setup">セットアップ</div>
-  <div class="tab"          data-tab="import">インポート</div>
+  <div class="tab active"   data-tab="import">インポート</div>
   <div class="tab"          data-tab="review">確認・編集</div>
   <div class="tab"          data-tab="photos">写真管理</div>
   <div class="tab"          data-tab="export">エクスポート</div>
 </div>
 
-<!-- ===== セットアップ ===== -->
-<div id="tab-setup" class="content active">
-  <div class="card">
-    <h2>テンプレの設定</h2>
-    <p style="color:#666;font-size:13px;margin-bottom:14px">
-      エクスポート時のベースとなる <strong>template.xlsx</strong> を読み込んでください。
-    </p>
-    <div class="drop-zone" id="template-drop">
-      <div class="icon">📄</div>
-      <div>template.xlsx をドロップ、またはクリックして選択</div>
-      <div class="hint">国総研様式テンプレファイル</div>
-      <input type="file" id="template-input" accept=".xlsx,.xls" style="display:none">
-    </div>
-    <div id="template-status" style="margin-top:12px"></div>
-  </div>
-  <div class="card">
-    <h2>Supabase 接続設定</h2>
-    <p style="color:#666;font-size:13px;margin-bottom:14px">
-      SupabaseプロジェクトのURLとanon keyを入力してください。<br>
-      <span style="font-size:11px;color:#aaa">anon keyはブラウザに保存されます。チームで同じURLとキーを使用します。</span>
-    </p>
-    <div class="form-grid" style="margin-bottom:12px">
-      <div class="form-group">
-        <label>Supabase URL</label>
-        <input type="url" id="sb-url" placeholder="https://xxxx.supabase.co">
-      </div>
-      <div class="form-group">
-        <label>anon key</label>
-        <input type="text" id="sb-key" placeholder="eyJhbGci...">
-      </div>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px">
-      <button class="btn btn-primary" onclick="saveSupabaseConfig()">保存して接続</button>
-      <span id="sb-save-status" style="font-size:12px;color:#2e7d32"></span>
-    </div>
-    <details style="margin-top:16px">
-      <summary style="cursor:pointer;font-size:12px;color:#1565c0;font-weight:600">Supabase で実行するSQL（初回のみ）</summary>
-      <div class="sql-block" style="margin-top:8px">-- 既存テーブルがある場合は先に削除
-drop table if exists public.approvals;
-drop table if exists public.bridges;
-
-create table public.bridges (
-  id uuid default gen_random_uuid() primary key,
-  management_number text,
-  name text,
-  data jsonb not null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
-create table public.approvals (
-  id uuid default gen_random_uuid() primary key,
-  bridge_id uuid references public.bridges(id) on delete cascade,
-  approver_name text,
-  notes text,
-  approved_at timestamptz default now()
-);
-
-alter table public.bridges enable row level security;
-alter table public.approvals enable row level security;
-
-create policy "bridges_all" on public.bridges
-  for all to anon using (true) with check (true);
-create policy "approvals_all" on public.approvals
-  for all to anon using (true) with check (true);</div>
-    </details>
-  </div>
-
-  <div class="card">
-    <h2>使い方</h2>
-    <ol style="font-size:13px;color:#555;line-height:2;padding-left:20px">
-      <li><strong>セットアップ</strong>：template.xlsx を読み込む</li>
-      <li><strong>インポート</strong>：過年度点検Excelファイルを複数ドロップ</li>
-      <li><strong>確認・編集</strong>：マッピングされたデータを確認・修正</li>
-      <li><strong>写真管理</strong>：橋梁ごとに写真フォルダを選択、サムネイルで確認・番号割当</li>
-      <li><strong>エクスポート</strong>：国総研様式Excelを橋梁ごとに出力（ZIP）</li>
-    </ol>
-    <div class="alert alert-warn" style="margin-top:14px">
-      <strong>損傷図PDF連携</strong>は後日実装予定。現在は写真番号を手動で割り当ててください。
-    </div>
-  </div>
-</div>
+<!-- hidden: template input（autoLoadTemplateから使用） -->
+<input type="file" id="template-input" accept=".xlsx,.xls" style="display:none">
+<div id="template-status" style="display:none"></div>
 
 <!-- ===== インポート ===== -->
-<div id="tab-import" class="content">
+<div id="tab-import" class="content active">
   <div class="card">
     <h2>過年度点検ファイルのインポート</h2>
     <p style="color:#666;font-size:13px;margin-bottom:14px">
@@ -436,6 +356,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const name = tab.dataset.tab;
     document.getElementById('tab-' + name).classList.add('active');
+    if (name === 'import') { /* デフォルト */ }
     if (name === 'review') refreshSidebar('review');
     if (name === 'photos') refreshSidebar('photos');
     if (name === 'export') refreshExportSummary();
