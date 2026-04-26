@@ -1308,54 +1308,50 @@ function fuzzyMatchOpts(val, opts) {
   return (bestScore >= 3) ? bestOpt : v;
 }
 
-// 【適用ルール】道路橋定期点検要領（国交省・国総研）準拠
-// 鋼材系損傷: 腐食・亀裂・ボルト脱落・破断・防食機能の劣化
-// コンクリート系損傷: ひびわれ漏水・鉄筋露出・抜け落ち
-// repairDmg/repairCls（補修補強材の損傷）は全部材適用のため NA に含めない
+// 【適用ルール】基礎データ収集要領（道路橋）令和6年版（国土交通省道路局）準拠
+// 表-3.1 損傷の種類と評価区分
+//   鋼 損傷: ①腐食 ②亀裂 ③ボルト脱落 ④破断 ⑤防食機能の劣化
+//   コンクリート損傷: ⑥ひびわれ漏水 ⑦鉄筋露出 ⑧抜け落ち ⑨床版ひびわれ ⑩PC定着部の異常
+//   共通（部材限定）: ⑪路面の凹凸 ⑫支承の機能障害 ⑬補修補強材の損傷 ⑭沈下移動傾斜 ⑮洗堀
+// ※ 補修補強材の損傷（⑬）は全部材に施工可能なため NA に含めない
+// ※ 主桁・横桁・縦桁は橋梁形式によって鋼/RC/PCが変わるため
+//    材料名が含まれない場合はルールなし（全列表示）
 const NA_RULES = [
-  // RC床版（床版ひびわれ・コンクリート系◎、鋼材系・PC定着外）
-  { match: /RC床版|床版\(RC\)/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // PC床版（床版ひびわれ・PC定着・コンクリート系◎、鋼材系外）
+  // PC床版（⑥〜⑨・⑩◎、鋼材系①〜⑤外）
   { match: /PC床版|床版\(PC\)/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','roadSurf','bearFunc','settlement','scour']) },
-  // 床版（材料未指定: 床版ひびわれ・コンクリート系◎、鋼材系外）
+  // RC床版・床版（材料不明を含む）（⑥〜⑨◎、鋼材系①〜⑤・⑩外）
   { match: /床版/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','roadSurf','bearFunc','settlement','scour']) },
-  // 橋台・橋脚・躯体（常にRC: 鋼材系外、ひびわれ/沈下/洗堀◎）
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
+  // 橋台・橋脚・躯体（常にRC: ⑥〜⑧・⑭・⑮◎、鋼材系①〜⑤外）
   { match: /橋台|橋脚|躯体/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc']) },
-  // 基礎・杭・フーチング（沈下・洗堀・補修のみ）
+  // 基礎・杭・フーチング（⑭沈下・⑮洗堀・⑬補修のみ対象）
   { match: /基礎|杭|フーチング/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc']) },
-  // 支承（支承機能障害◎、鋼製支承は腐食/防食も対象のため残す）
+  // 支承（⑫支承機能◎、腐食①・防食⑤は鋼製支承で適用するため残す）
   { match: /支承/,
     na: new Set(['crack','boltLoss','fracture','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','settlement','scour']) },
-  // 路面・舗装（路面凹凸のみ）
+  // 路面・舗装（⑪路面凹凸のみ）
   { match: /路面|舗装|アスファルト/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','bearFunc','settlement','scour']) },
-  // ケーブル・主塔（鋼: ボルト脱落なし、コンクリート系外）
-  { match: /ケーブル|主塔/,
-    na: new Set(['boltLoss','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 対傾構・横構・補剛桁（鋼組部材: コンクリート系・床版・下部工外）
+  // 対傾構・横構・補剛桁（鋼橋にのみ存在する部材→必ず鋼）
   { match: /対傾構|横構|補剛桁/,
     na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 横桁・縦桁（日本の道路橋では鋼材: コンクリート系・床版・下部工外）
-  { match: /横桁|縦桁/,
+  // ケーブル・斜材・ハンガー・主塔（斜張橋・吊橋の鋼部材、ボルト脱落は対象外）
+  { match: /ケーブル|斜材|ハンガー|主塔/,
+    na: new Set(['boltLoss','concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
+  // 鋼を明示した部材（鋼主桁・鋼横桁・I桁・箱桁・トラス等）
+  { match: /鋼主桁|鋼横桁|鋼縦桁|鋼桁|I桁|箱桁|トラス/,
     na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // 鋼材系（明示: コンクリート系・床版・PC定着・下部工外）
-  { match: /鋼|I桁|箱桁|トラス/,
-    na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // PC部材（床版以外: コンクリート系・PC定着◎、鋼材系外）
-  { match: /PC/,
+  // PC主桁・PC横桁等（⑥〜⑧・⑩◎、鋼材系①〜⑤外）
+  { match: /PC主桁|PC横桁|PC桁/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','roadSurf','bearFunc','settlement','scour']) },
-  // RC・コンクリート部材（床版・下部工以外: コンクリート系◎、鋼材系・床版・PC定着外）
-  { match: /RC|コンクリート/,
+  // RC主桁・RC横桁等（⑥〜⑧◎、鋼材系①〜⑤・⑩外）
+  { match: /RC主桁|RC横桁|RC桁/,
     na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // アーチ（材料未指定: 鋼アーチが多数のため鋼として扱う）
-  { match: /アーチ/,
-    na: new Set(['concrete','concPat','steelExp','fallOff','slabCrack','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
-  // ※ 主桁のみ（材料未指定）はルールなし → 全列表示（RC/PC/鋼どちらか判断できないため）
+  // ※ 主桁・横桁・縦桁（材料未指定）→ ルールなし・全列表示
+  //    橋梁形式によって鋼/RC/PCが変わるため材料が特定できない
 ];
 
 function getNACols(memberType) {
