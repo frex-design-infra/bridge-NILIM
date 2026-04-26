@@ -372,27 +372,10 @@ document.querySelectorAll('.tab').forEach(tab => {
 // ============================================================
 // TEMPLATE LOAD
 // ============================================================
-const templateDrop  = document.getElementById('template-drop');
-const templateInput = document.getElementById('template-input');
-
-templateDrop.addEventListener('click', () => templateInput.click());
-templateDrop.addEventListener('dragover',  e => { e.preventDefault(); templateDrop.classList.add('dragover'); });
-templateDrop.addEventListener('dragleave', () => templateDrop.classList.remove('dragover'));
-templateDrop.addEventListener('drop', e => {
-  e.preventDefault(); templateDrop.classList.remove('dragover');
-  if (e.dataTransfer.files[0]) loadTemplate(e.dataTransfer.files[0]);
-});
-templateInput.addEventListener('change', e => { if (e.target.files[0]) loadTemplate(e.target.files[0]); });
-
 function loadTemplate(file) {
   const reader = new FileReader();
   reader.onload = ev => {
     templateWB = XLSX.read(ev.target.result, { type: 'array' });
-    document.getElementById('template-status').innerHTML =
-      `<div class="alert alert-ok">テンプレ読み込み完了：<strong>${file.name}</strong>（シート: ${templateWB.SheetNames.join(' / ')}）</div>`;
-    templateDrop.style.borderColor = '#2e7d32';
-    templateDrop.style.background  = '#f0fdf4';
-    templateDrop.querySelector('div:not(.hint):not(.icon)').textContent = 'テンプレ設定済み（クリックで再選択）';
   };
   reader.readAsArrayBuffer(file);
 }
@@ -1844,12 +1827,7 @@ async function autoLoadTemplate() {
     if (!res.ok) return;
     const buf = await res.arrayBuffer();
     templateWB = XLSX.read(buf, { type: 'array' });
-    document.getElementById('template-status').innerHTML =
-      `<div class="alert alert-ok">テンプレ読み込み完了（標準テンプレ）</div>`;
-    templateDrop.style.borderColor = '#2e7d32';
-    templateDrop.style.background  = '#f0fdf4';
-    templateDrop.querySelector('div:not(.hint):not(.icon)').textContent =
-      '標準テンプレ設定済み（クリックで差し替え）';
+    console.log('標準テンプレ読み込み完了');
   } catch(e) {
     // ローカル環境ではスキップ
   }
