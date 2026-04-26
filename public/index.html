@@ -1678,24 +1678,28 @@ function saveSupabaseConfig() {
 // SUPABASE データ操作
 // ============================================================
 async function loadBridgesFromSupabase() {
-  if (!supabaseClient) return;
-  const { data, error } = await supabaseClient
-    .from('bridges')
-    .select('id, name, management_number, data, updated_at')
-    .order('updated_at', { ascending: false });
-  if (error) { console.error('load bridges:', error); return; }
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'list', payload: {} })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
 
-  bridges = data.map(row => {
-    const b = row.data || {};
-    b._sbId      = row.id;
-    b._approvals = [];
-    return b;
-  });
+    bridges = data.map(row => {
+      const b = row.data || {};
+      b._sbId      = row.id;
+      b._approvals = [];
+      return b;
+    });
 
-  await loadAllApprovals();
-  refreshSidebar('review');
-  refreshSidebar('photos');
-  refreshExportSummary();
+    refreshSidebar('review');
+    refreshSidebar('photos');
+    refreshExportSummary();
+  } catch(e) {
+    console.error('load bridges:', e);
+  }
 }
 
 async function loadAllApprovals() {
@@ -1720,26 +1724,26 @@ function bridgePayload(bridge) {
 }
 
 async function saveBridgeToSupabase(bridge) {
-  if (!supabaseClient) return { id: null, error: 'Supabase未初期化' };
-
   const payload = {
     management_number: bridge.managementNumber || null,
     name: bridge.name || null,
     data: bridgePayload(bridge),
     updated_at: new Date().toISOString()
   };
+  if (bridge._sbId) payload.id = bridge._sbId;
 
-  if (bridge._sbId) {
-    const { error } = await supabaseClient
-      .from('bridges').update(payload).eq('id', bridge._sbId);
-    if (error) return { id: null, error: error.message };
-    return { id: bridge._sbId, error: null };
-  } else {
-    const { data, error } = await supabaseClient
-      .from('bridges').insert(payload).select('id').single();
-    if (error) return { id: null, error: error.message };
-    bridge._sbId = data.id;
-    return { id: data.id, error: null };
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', payload })
+    });
+    const json = await res.json();
+    if (!res.ok) return { id: null, error: json.error || res.statusText };
+    bridge._sbId = json.id;
+    return { id: json.id, error: null };
+  } catch(e) {
+    return { id: null, error: e.message };
   }
 }
 
