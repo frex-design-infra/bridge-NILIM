@@ -131,8 +131,23 @@ td.notes-col input { text-align: left; }
 
 /* サイドバーレイアウト */
 .sidebar-layout { display: flex; gap: 16px; }
-.sidebar { width: 210px; flex-shrink: 0; }
+.sidebar { width: 240px; flex-shrink: 0; }
 .sidebar-body { flex: 1; min-width: 0; }
+
+/* 確認タブ：業務セクション */
+.rev-gyomu-label { font-size:10px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:0 4px 5px; }
+.rev-gyomu-item { display:flex; align-items:center; gap:6px; padding:7px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px; transition:background 0.12s; }
+.rev-gyomu-item:hover { background:#eef7fd; }
+.rev-gyomu-item.active { background:#1e3a5f; color:white; }
+.rev-gyomu-item .rgi-name { flex:1; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rev-gyomu-item .rgi-cnt { font-size:10px; flex-shrink:0; opacity:0.65; }
+.rev-bridge-label { font-size:10px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:8px 4px 5px; border-top:1px solid #eee; margin-top:4px; }
+
+/* パンくず */
+.review-breadcrumb { display:flex; align-items:center; gap:6px; font-size:13px; color:#1e3a5f; font-weight:600; margin-bottom:4px; flex-wrap:wrap; }
+.review-breadcrumb .bc-gyomu { color:#5dade2; }
+.review-breadcrumb .bc-sep { color:#bbb; font-size:12px; }
+.review-breadcrumb .bc-bridge { color:#1e3a5f; }
 
 /* ログインオーバーレイ */
 #login-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 9999; }
@@ -225,18 +240,18 @@ td.col-na { background: #e8e8e8; cursor: default; }
   <div class="sidebar-layout">
     <div class="sidebar">
       <div class="card" style="padding:12px">
-        <h2 style="margin-bottom:10px">橋梁一覧</h2>
-        <div id="review-sidebar" class="bridge-list"></div>
+        <div id="review-sidebar"></div>
       </div>
     </div>
     <div class="sidebar-body">
       <div id="review-placeholder" class="card" style="text-align:center;padding:60px;color:#aaa">
-        左の一覧から橋梁を選択してください
+        左の業務を選択し、橋梁を選んでください
       </div>
       <div id="review-content" style="display:none">
-        <!-- クラウド保存・是認 -->
-        <div class="card" id="card-actions" style="padding:14px 18px">
-          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <!-- パンくず＋クラウド保存 -->
+        <div class="card" id="card-actions" style="padding:12px 18px">
+          <div class="review-breadcrumb" id="review-breadcrumb"></div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
             <button class="btn btn-primary btn-sm" onclick="saveCurrentBridge()">クラウドに保存</button>
             <span id="save-status" style="font-size:11px;color:#2e7d32"></span>
           </div>
@@ -361,13 +376,14 @@ td.col-na { background: #e8e8e8; cursor: default; }
 // ============================================================
 // STATE
 // ============================================================
-let templateWB  = null;      // テンプレworkbook
-let gyomuList   = [];        // [{id, name}]  業務マスタ
-let bridges     = [];        // BridgeData[]  bridge.gyomuId で業務に紐付け
-let selBridge   = -1;        // 確認タブ選択中
-let selPhoto    = -1;        // 写真タブ選択中
-let selSpan     = 0;         // 確認タブ選択径間
-let _accExpanded = {};       // サイドバーアコーディオン開閉状態 {gyomuId: bool}
+let templateWB   = null;     // テンプレworkbook
+let gyomuList    = [];       // [{id, name}]  業務マスタ
+let bridges      = [];       // BridgeData[]  bridge.gyomuId で業務に紐付け
+let selBridge    = -1;       // 確認タブ：選択中橋梁インデックス
+let selGyomuId   = null;     // 確認タブ：選択中業務ID
+let selPhoto     = -1;       // 写真タブ選択中
+let selSpan      = 0;        // 確認タブ選択径間
+let _accExpanded = {};       // 写真タブアコーディオン開閉状態 {gyomuId: bool}
 
 function genId() { return 'g' + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
 
@@ -762,51 +778,42 @@ function fLoc(data, marker) {
 // SIDEBAR
 // ============================================================
 function refreshSidebar(tab) {
-  const el  = document.getElementById(tab + '-sidebar');
-  const sel = tab === 'review' ? selBridge : selPhoto;
-  el.innerHTML = '';
+  if (tab === 'review') { refreshReviewSidebar(); return; }
 
+  // ===== 写真タブ：アコーディオン =====
+  const el  = document.getElementById('photos-sidebar');
+  el.innerHTML = '';
   if (!bridges.length) {
-    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">インポートタブで橋梁を読込んでください</div>';
+    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">橋梁データなし</div>';
     return;
   }
-
-  // gyomuListの順序でグループ化、未設定は末尾
-  const grouped = new Map(); // gyomuId → {name, items:[]}
+  const grouped = new Map();
   gyomuList.forEach(g => grouped.set(g.id, { name: g.name, items: [] }));
-
   bridges.forEach((b, i) => {
     const gid = b.gyomuId || '__none__';
     if (!grouped.has(gid)) grouped.set(gid, { name: '（業務未設定）', items: [] });
     grouped.get(gid).items.push({ b, i });
   });
-
   grouped.forEach((group, gid) => {
-    if (!group.items.length) return; // 橋梁のない業務は表示しない
-
-    // デフォルト展開
+    if (!group.items.length) return;
     if (_accExpanded[gid] === undefined) _accExpanded[gid] = true;
     const isOpen = _accExpanded[gid];
-
     const section = document.createElement('div');
     section.className = 'gyomu-acc-section';
-
     const hdr = document.createElement('div');
     hdr.className = 'gyomu-acc-hdr';
-    hdr.innerHTML = `
-      <span style="font-size:10px;flex-shrink:0">${isOpen ? '▼' : '▶'}</span>
-      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(group.name)}">${esc(group.name)}</span>
+    hdr.innerHTML = `<span style="font-size:10px;flex-shrink:0">${isOpen?'▼':'▶'}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(group.name)}</span>
       <span class="gyomu-badge">${group.items.length}橋</span>`;
-    hdr.onclick = () => { _accExpanded[gid] = !_accExpanded[gid]; refreshSidebar(tab); };
+    hdr.onclick = () => { _accExpanded[gid] = !_accExpanded[gid]; refreshSidebar('photos'); };
     section.appendChild(hdr);
-
     if (isOpen) {
       group.items.forEach(({ b, i }) => {
         const item = document.createElement('div');
-        item.className = 'bridge-item' + (i === sel ? ' selected' : '');
+        item.className = 'bridge-item' + (i === selPhoto ? ' selected' : '');
         item.style.paddingLeft = '18px';
         item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
-        item.onclick = () => tab === 'review' ? selectBridge(i) : selectPhotoBridge(i);
+        item.onclick = () => selectPhotoBridge(i);
         section.appendChild(item);
       });
     }
@@ -814,15 +821,90 @@ function refreshSidebar(tab) {
   });
 }
 
+function refreshReviewSidebar() {
+  const el = document.getElementById('review-sidebar');
+  el.innerHTML = '';
+
+  if (!gyomuList.length) {
+    el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">インポートタブで業務・橋梁を登録してください</div>';
+    return;
+  }
+
+  // ── 業務リスト ──
+  const gyomuLabel = document.createElement('div');
+  gyomuLabel.className = 'rev-gyomu-label';
+  gyomuLabel.textContent = '業務';
+  el.appendChild(gyomuLabel);
+
+  gyomuList.forEach(g => {
+    const gb   = bridges.filter(b => b.gyomuId === g.id);
+    const isSel = selGyomuId === g.id;
+    const item = document.createElement('div');
+    item.className = 'rev-gyomu-item' + (isSel ? ' active' : '');
+    item.innerHTML = `<span class="rgi-name" title="${esc(g.name)}">${esc(g.name)}</span>
+                      <span class="rgi-cnt">${gb.length}橋</span>`;
+    item.onclick = () => {
+      selGyomuId = g.id;
+      // 別業務を選んだら橋梁選択をリセット
+      if (selBridge >= 0 && bridges[selBridge]?.gyomuId !== g.id) {
+        selBridge = -1;
+        document.getElementById('review-placeholder').style.display = '';
+        document.getElementById('review-content').style.display = 'none';
+      }
+      refreshReviewSidebar();
+    };
+    el.appendChild(item);
+  });
+
+  // ── 選択業務の橋梁リスト ──
+  if (selGyomuId) {
+    const g  = gyomuList.find(x => x.id === selGyomuId);
+    const gb = bridges.map((b, i) => ({ b, i })).filter(({ b }) => b.gyomuId === selGyomuId);
+
+    const bridgeLabel = document.createElement('div');
+    bridgeLabel.className = 'rev-bridge-label';
+    bridgeLabel.textContent = `橋梁　${gb.length}橋`;
+    el.appendChild(bridgeLabel);
+
+    if (!gb.length) {
+      const empty = document.createElement('div');
+      empty.style.cssText = 'color:#bbb;font-size:12px;text-align:center;padding:16px;';
+      empty.textContent = 'この業務に橋梁がありません';
+      el.appendChild(empty);
+    } else {
+      gb.forEach(({ b, i }) => {
+        const item = document.createElement('div');
+        item.className = 'bridge-item' + (i === selBridge ? ' selected' : '');
+        item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
+        item.onclick = () => selectBridge(i);
+        el.appendChild(item);
+      });
+    }
+  }
+}
+
 // ============================================================
 // REVIEW TAB
 // ============================================================
 function selectBridge(i) {
-  selBridge = i; selSpan = 0;
-  refreshSidebar('review');
+  selBridge  = i;
+  selSpan    = 0;
+  selGyomuId = bridges[i]?.gyomuId || selGyomuId; // 業務を橋梁に合わせる
+  refreshReviewSidebar();
   renderReview(bridges[i]);
+  updateBreadcrumb(i);
   renderApprovalStatus(i);
   document.getElementById('save-status').textContent = '';
+}
+
+function updateBreadcrumb(bi) {
+  const b = bridges[bi];
+  const g = gyomuList.find(x => x.id === b?.gyomuId);
+  const el = document.getElementById('review-breadcrumb');
+  if (!el) return;
+  el.innerHTML = g
+    ? `<span class="bc-gyomu">${esc(g.name)}</span><span class="bc-sep">›</span><span class="bc-bridge">${esc(b?.name||'(橋梁名不明)')}</span>`
+    : `<span class="bc-bridge">${esc(b?.name||'(橋梁名不明)')}</span>`;
 }
 
 function renderReview(b) {
