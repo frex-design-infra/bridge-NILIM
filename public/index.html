@@ -169,6 +169,10 @@ td.notes-col input { text-align: left; }
 /* 評価対象外セル */
 td.col-na { background: #e8e8e8; cursor: default; }
 
+/* 変更赤字表示 */
+td.val-changed { outline: 2px solid #dc2626; outline-offset: -2px; }
+td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; }
+
 /* 諸元コンボボックス */
 .combo-wrap { position: relative; display: flex; gap: 2px; }
 .combo-input { flex: 1; min-width: 0; }
@@ -429,7 +433,7 @@ function promptAddGyomu() {
   const name = prompt('業務名を入力してください\n例：〇〇市 令和6年度 道路橋定期点検業務');
   if (!name || !name.trim()) return;
   const id = genId();
-  gyomuList.push({ id, name: name.trim() });
+  gyomuList.push({ id, name: name.trim(), showChanges: false });
   _accExpanded[id] = true;
   renderGyomuCards();
 }
@@ -513,6 +517,8 @@ function handleGyomuFiles(files, gyomuId) {
         const wb     = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
         const bridge = parseOldExcel(wb, file.name);
         bridge.gyomuId = gyomuId;
+        // インポート時の評価値を保存（業務毎の「変更赤字」比較用）
+        bridge.spans.forEach(sp => sp.members.forEach(m => { m.d_orig = Object.assign({}, m.d); }));
         bridges.push(bridge);
         renderGyomuCards();
         // 確認・写真タブが開いていればサイドバーも更新
@@ -904,7 +910,18 @@ function refreshReviewSidebar() {
     const item = document.createElement('div');
     item.className = 'rev-gyomu-item' + (isSel ? ' active' : '');
     item.innerHTML = `<span class="rgi-name" title="${esc(g.name)}">${esc(g.name)}</span>
-                      <span class="rgi-cnt">${gb.length}橋</span>`;
+                      <span class="rgi-cnt">${gb.length}橋</span>
+                      <label onclick="event.stopPropagation()" title="インポート値から変更した評価を赤字で表示"
+                        style="display:inline-flex;align-items:center;gap:3px;font-size:10px;
+                               color:${g.showChanges?'#dc2626':'#999'};white-space:nowrap;cursor:pointer;
+                               padding:1px 5px;border-radius:3px;
+                               background:${g.showChanges?'#fff5f5':'transparent'}">
+                        <input type="checkbox" ${g.showChanges?'checked':''}
+                          onclick="event.stopPropagation()"
+                          onchange="toggleGyomuShowChanges('${g.id}',this.checked)"
+                          style="width:11px;height:11px;cursor:pointer;accent-color:#dc2626">
+                        変更赤字
+                      </label>`;
     item.onclick = () => {
       selGyomuId = g.id;
       // 別業務を選んだら橋梁選択をリセット
@@ -1154,6 +1171,7 @@ function renderReview(b) {
 function renderDamageTable(b) {
   const span = b.spans[selSpan];
   if (!span) { document.getElementById('damage-table').innerHTML = '<tr><td style="padding:20px;color:#aaa">損傷データなし</td></tr>'; return; }
+  const _showChanges = gyomuList.find(x => x.id === b.gyomuId)?.showChanges ?? false;
 
   // ⑬補修・補強材の損傷 チェックボックス描画
   const bi = selBridge;
@@ -1240,9 +1258,13 @@ function renderDamageTable(b) {
       }
 
       const warn = (c.key==='settlement' && m.d._oldSubWork) || (c.key==='bearFunc' && m.d._hasYuHari);
+      // 変更赤字チェック: d_orig と現在値を比較（nullは同一扱い）
+      const origVal = m.d_orig != null ? (m.d_orig[c.key] ?? null) : undefined;
+      const isChanged = _showChanges && origVal !== undefined && (val ?? null) !== origVal;
       let cls = c.isNew ? 'col-new' : '';
       if (warn) cls += ' col-new-warn';
-      if (val && !c.isNew && !warn) {
+      if (isChanged) cls += ' val-changed';
+      if (val && !c.isNew && !warn && !isChanged) {
         const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
         cls += ' ' + (vmap[val]||'');
       }
@@ -1344,7 +1366,7 @@ function renderDamageTable(b) {
 
   html += '</tbody>';
   html += `<tfoot><tr><td colspan="${cols.length}" style="padding:6px 8px;background:#fafafa;font-size:11px;color:#888;text-align:left">
-    ★ 黄地=新テンプレ追加列 ／ 橙地=旧様式「有/無」から変換（要確認）または旧データにa/e以外が混入 ／ ?=評価区分不明（値を入力してください）<br>
+    ★ 黄地=新テンプレ追加列 ／ 橙地=旧様式「有/無」から変換（要確認）または旧データにa/e以外が混入 ／ ?=評価区分不明（値を入力してください） ／ <span style="color:#dc2626;font-weight:700">赤枠・赤字=インポート値から変更あり（サイドバーの「変更赤字」ON時）</span><br>
     【要領p.6 表-3.1】a〜e（5段階）: ①腐食 ⑤防食機能 ⑥ひびわれ漏水 ⑨床版ひびわれ　／　a,eのみ（2段階）: ②亀裂 ③ボルト脱落 ④破断 ⑦鉄筋露出 ⑧抜落 ⑩PC定着部 ⑪路面 ⑫支承 ⑬補修 ⑭沈下 ⑮洗堀
   </td></tr></tfoot>`;
 
@@ -1372,6 +1394,18 @@ function colorCell(sel) {
 function toggleRepair(bi, checked) {
   bridges[bi].hasRepair = checked;
   renderDamageTable(bridges[bi]);
+}
+
+// 業務毎「変更赤字」チェックボックス切り替え
+function toggleGyomuShowChanges(id, checked) {
+  const g = gyomuList.find(x => x.id === id);
+  if (!g) return;
+  g.showChanges = checked;
+  refreshReviewSidebar();
+  // 現在表示中の橋梁がこの業務ならテーブルを再描画
+  if (selBridge >= 0 && bridges[selBridge]?.gyomuId === id) {
+    renderDamageTable(bridges[selBridge]);
+  }
 }
 
 // ⑥ひびわれ漏水 — concrete 変更時に concPat セルを連動更新（要領p.14）
