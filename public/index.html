@@ -159,37 +159,8 @@ td.notes-col input { text-align: left; }
 
 <header>
   <h1>国総研調書作成ツール</h1>
-  <span class="sub" style="margin-left:14px">道路橋定期点検 — 過年度→国総研様式 変換・エクスポート</span>
-  <div class="header-user">
-    <span class="email" id="header-user-email"></span>
-    <button id="btn-logout" class="btn btn-sm"
-      style="display:none;color:white;border:1px solid rgba(255,255,255,0.4);background:transparent"
-      onclick="doLogout()">ログアウト</button>
-  </div>
+  <span class="sub">道路橋定期点検 — 過年度→国総研様式 変換・エクスポート</span>
 </header>
-
-<!-- ===== ログインオーバーレイ ===== -->
-<div id="login-overlay">
-  <div class="login-card">
-    <h2>国総研調書作成ツール</h2>
-    <span class="sub">ログインしてください</span>
-    <div class="form-group" style="margin-bottom:12px">
-      <label>メールアドレス</label>
-      <input type="email" id="login-email" placeholder="example@company.com" autocomplete="email"
-        onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <div class="form-group" style="margin-bottom:18px">
-      <label>パスワード</label>
-      <input type="password" id="login-password" placeholder="パスワード" autocomplete="current-password"
-        onkeydown="if(event.key==='Enter')doLogin()">
-    </div>
-    <button class="btn btn-primary" style="width:100%;padding:10px;font-size:14px" onclick="doLogin()">ログイン</button>
-    <div id="login-error" style="margin-top:10px;color:#c62828;font-size:12px;min-height:18px"></div>
-    <div id="login-config-hint" style="margin-top:14px;padding-top:12px;border-top:1px solid #eee;font-size:11px;color:#999">
-      ※ Supabase未設定の場合はログインできません。先にセットアップタブで設定してください。
-    </div>
-  </div>
-</div>
 
 <div class="tabs">
   <div class="tab active"   data-tab="setup">セットアップ</div>
@@ -236,12 +207,15 @@ td.notes-col input { text-align: left; }
     </div>
     <details style="margin-top:16px">
       <summary style="cursor:pointer;font-size:12px;color:#1565c0;font-weight:600">Supabase で実行するSQL（初回のみ）</summary>
-      <div class="sql-block" style="margin-top:8px">create table public.bridges (
+      <div class="sql-block" style="margin-top:8px">-- 既存テーブルがある場合は先に削除
+drop table if exists public.approvals;
+drop table if exists public.bridges;
+
+create table public.bridges (
   id uuid default gen_random_uuid() primary key,
   management_number text,
   name text,
   data jsonb not null,
-  created_by uuid references auth.users(id),
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -249,8 +223,7 @@ td.notes-col input { text-align: left; }
 create table public.approvals (
   id uuid default gen_random_uuid() primary key,
   bridge_id uuid references public.bridges(id) on delete cascade,
-  user_id uuid references auth.users(id),
-  user_email text,
+  approver_name text,
   notes text,
   approved_at timestamptz default now()
 );
@@ -258,12 +231,10 @@ create table public.approvals (
 alter table public.bridges enable row level security;
 alter table public.approvals enable row level security;
 
-create policy "bridges_select" on public.bridges for select to authenticated using (true);
-create policy "bridges_insert" on public.bridges for insert to authenticated with check (true);
-create policy "bridges_update" on public.bridges for update to authenticated using (true);
-create policy "approvals_select" on public.approvals for select to authenticated using (true);
-create policy "approvals_insert" on public.approvals for insert to authenticated
-  with check (auth.uid() = user_id);</div>
+create policy "bridges_all" on public.bridges
+  for all to anon using (true) with check (true);
+create policy "approvals_all" on public.approvals
+  for all to anon using (true) with check (true);</div>
     </details>
   </div>
 
@@ -1779,15 +1750,13 @@ const SB_URL = 'https://twolywmokxggjnugzuig.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
 
 let supabaseClient = null;
-let currentUser    = null;
 
 // ============================================================
-// SUPABASE 初期化・認証
+// SUPABASE 初期化
 // ============================================================
 function initSupabase() {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
-  if (!url || !key) return false;
+  const url = localStorage.getItem('sb_url') || SB_URL;
+  const key = localStorage.getItem('sb_key') || SB_KEY;
   supabaseClient = supabase.createClient(url, key);
   return true;
 }
@@ -1799,43 +1768,7 @@ function saveSupabaseConfig() {
   localStorage.setItem('sb_url', url);
   localStorage.setItem('sb_key', key);
   initSupabase();
-  document.getElementById('sb-save-status').textContent = '✓ 保存しました。ログインしてください。';
-  document.getElementById('login-config-hint').style.display = 'none';
-}
-
-async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const pass  = document.getElementById('login-password').value;
-  const errEl = document.getElementById('login-error');
-  errEl.textContent = '';
-
-  if (!supabaseClient && !initSupabase()) {
-    errEl.textContent = 'Supabaseが未設定です。セットアップタブで設定してください。';
-    return;
-  }
-
-  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
-  if (error) { errEl.textContent = error.message; return; }
-
-  onLogin(data.user);
-}
-
-async function doLogout() {
-  if (supabaseClient) await supabaseClient.auth.signOut();
-  currentUser = null;
-  bridges = [];
-  selBridge = -1; selPhoto = -1;
-  document.getElementById('login-overlay').style.display = 'flex';
-  document.getElementById('header-user-email').textContent = '';
-  document.getElementById('btn-logout').style.display = 'none';
-}
-
-function onLogin(user) {
-  currentUser = user;
-  document.getElementById('login-overlay').style.display = 'none';
-  document.getElementById('header-user-email').textContent = user.email;
-  document.getElementById('btn-logout').style.display = 'block';
-  loadBridgesFromSupabase();
+  document.getElementById('sb-save-status').textContent = '✓ 保存しました';
 }
 
 // ============================================================
@@ -1851,7 +1784,7 @@ async function loadBridgesFromSupabase() {
 
   bridges = data.map(row => {
     const b = row.data || {};
-    b._sbId = row.id;
+    b._sbId      = row.id;
     b._approvals = [];
     return b;
   });
@@ -1884,13 +1817,12 @@ function bridgePayload(bridge) {
 }
 
 async function saveBridgeToSupabase(bridge) {
-  if (!supabaseClient || !currentUser) return null;
+  if (!supabaseClient) return null;
 
   const payload = {
     management_number: bridge.managementNumber || null,
     name: bridge.name || null,
     data: bridgePayload(bridge),
-    created_by: currentUser.id,
     updated_at: new Date().toISOString()
   };
 
@@ -1909,7 +1841,7 @@ async function saveBridgeToSupabase(bridge) {
 }
 
 async function saveCurrentBridge() {
-  if (selBridge < 0 || !currentUser) return;
+  if (selBridge < 0) return;
   const st = document.getElementById('save-status');
   st.textContent = '保存中...';
   const id = await saveBridgeToSupabase(bridges[selBridge]);
@@ -1917,7 +1849,7 @@ async function saveCurrentBridge() {
 }
 
 async function approveBridge(bi) {
-  if (bi < 0 || !currentUser) return;
+  if (bi < 0) return;
   const bridge = bridges[bi];
 
   if (!bridge._sbId) {
@@ -1925,14 +1857,15 @@ async function approveBridge(bi) {
     if (!id) { alert('保存に失敗しました'); return; }
   }
 
-  const notes = prompt(`「${bridge.name}」を是認します。\nコメント（省略可）`) ?? null;
-  if (notes === null) return; // キャンセル
+  const name = prompt(`「${bridge.name}」を是認します。\n是認者名を入力してください`);
+  if (name === null || !name.trim()) return;
+
+  const notes = prompt('コメント（省略可）') ?? '';
 
   const { error } = await supabaseClient.from('approvals').insert({
-    bridge_id : bridge._sbId,
-    user_id   : currentUser.id,
-    user_email: currentUser.email,
-    notes     : notes || null
+    bridge_id     : bridge._sbId,
+    approver_name : name.trim(),
+    notes         : notes || null
   });
 
   if (error) { alert('是認に失敗しました: ' + error.message); return; }
@@ -1953,10 +1886,10 @@ function renderApprovalStatus(bi) {
 
   if (approvals.length) {
     const latest = approvals[0];
-    inlineEl.innerHTML = `<span class="approval-ok">✓ 是認済み ${latest.user_email} (${new Date(latest.approved_at).toLocaleDateString('ja-JP')})</span>`;
+    inlineEl.innerHTML = `<span class="approval-ok">✓ 是認済み ${latest.approver_name} (${new Date(latest.approved_at).toLocaleDateString('ja-JP')})</span>`;
     histEl.style.display = 'block';
     listEl.innerHTML = approvals.map(a =>
-      `<li>✓ ${a.user_email}　${new Date(a.approved_at).toLocaleString('ja-JP')}${a.notes ? '　' + a.notes : ''}</li>`
+      `<li>✓ ${a.approver_name}　${new Date(a.approved_at).toLocaleString('ja-JP')}${a.notes ? '　' + a.notes : ''}</li>`
     ).join('');
   } else {
     inlineEl.innerHTML = '<span class="approval-no">未是認</span>';
@@ -1968,27 +1901,13 @@ function renderApprovalStatus(bi) {
 // 初期化（ページロード時）
 // ============================================================
 window.addEventListener('load', () => {
-  // デフォルト値（未設定の場合は組み込みのURLとキーを使用）
   const url = localStorage.getItem('sb_url') || SB_URL;
   const key = localStorage.getItem('sb_key') || SB_KEY;
-  localStorage.setItem('sb_url', url);
-  localStorage.setItem('sb_key', key);
   document.getElementById('sb-url').value = url;
   document.getElementById('sb-key').value = key;
 
-  if (initSupabase()) {
-    document.getElementById('login-config-hint').style.display = 'none';
-    // 既存セッション確認
-    supabaseClient.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        onLogin(session.user);
-      }
-    });
-    // 認証状態変化を監視
-    supabaseClient.auth.onAuthStateChange((_event, session) => {
-      if (!session && currentUser) doLogout();
-    });
-  }
+  initSupabase();
+  loadBridgesFromSupabase();
 });
 
 // ============================================================
