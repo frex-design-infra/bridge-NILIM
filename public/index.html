@@ -1662,8 +1662,10 @@ function getConcPatOpts(memberType, superMat) {
 }
 
 function buildConcPatSelect(bi, si, mi, val) {
-  const m = bridges[bi].spans[si].members[mi];
-  const opts = getConcPatOpts(m.type || '', _superMat || '');
+  const b = bridges[bi];
+  const m = b.spans[si].members[mi];
+  const superMat = getSuperMatType(b.superType || '');
+  const opts = getConcPatOpts(m.type || '', superMat);
   const found = opts.find(([v]) => v === val);
   const optsHtml = opts.map(([v, t]) =>
     `<option value="${v}" title="${t}"${val===v?' selected':''}>${v}</option>`
@@ -1672,12 +1674,20 @@ function buildConcPatSelect(bi, si, mi, val) {
   return `<select id="concpat-${bi}-${si}-${mi}"
     style="font-size:11px;max-width:68px"
     title="${found ? found[1] : 'ひびわれパターンを選択'}"
-    onchange="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null;
-      const s=document.getElementById('concpat-${bi}-${si}-${mi}');
-      if(s){const o=getConcPatOpts(bridges[${bi}].spans[${si}].members[${mi}].type||'',_superMat||'');
-      const f=o.find(([v])=>v===s.value);s.title=f?f[1]:'';}">
+    onchange="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null;updateConcPatTitle(${bi},${si},${mi})">
     <option value="">—</option>${optsHtml}${extra}
   </select>`;
+}
+
+function updateConcPatTitle(bi, si, mi) {
+  const sel = document.getElementById(`concpat-${bi}-${si}-${mi}`);
+  if (!sel) return;
+  const b = bridges[bi];
+  const m = b.spans[si].members[mi];
+  const superMat = getSuperMatType(b.superType || '');
+  const opts = getConcPatOpts(m.type || '', superMat);
+  const found = opts.find(([v]) => v === sel.value);
+  sel.title = found ? found[1] : '';
 }
 
 const ANTICOR_MAP = {
