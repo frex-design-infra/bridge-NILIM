@@ -1422,9 +1422,7 @@ function renderDamageTable(b) {
             title="ひびわれ漏水がaまたは未評価のためパターン不要"></td>`;
         } else {
           html += `<td id="concpat-td-${bi}-${si}-${mi}" class="${cls}">
-            <input type="text" value="${esc(val||'')}" style="width:44px;text-align:center" placeholder="番号"
-              title="要領p.14 パターン①〜㉗を入力"
-              oninput="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null">
+            ${buildConcPatSelect(bi, si, mi, val||'')}
           </td>`;
         }
       } else if (c.key === 'antiCorCls') {
@@ -1585,9 +1583,7 @@ function updateConcPatCell(bi, si, mi) {
   if (needsPat) {
     td.className = td.className.replace(/\bcol-na\b/g,'').trim();
     td.title = '';
-    td.innerHTML = `<input type="text" value="${(m.d.concPat||'')}" style="width:44px;text-align:center" placeholder="番号"
-      title="要領p.14 パターン①〜㉗を入力"
-      oninput="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null">`;
+    td.innerHTML = buildConcPatSelect(bi, si, mi, m.d.concPat || '');
   } else {
     m.d.concPat = null;  // 値クリア
     td.className = (td.className + ' col-na').trim();
@@ -1611,6 +1607,79 @@ function getAntiCorOpts(clsVal) {
 // 分類1（塗装）: a→a, b→c, c→d, d→e, e→e
 // 分類2（めっき・金属溶射）: a→a, b→c, c→e, d→e, e→e
 // 分類3（耐候性鋼材）: a→a, b→b, c→c, d→d, e→e
+// ひびわれパターン選択肢（基礎データ収集要領 令和6年版）
+const CONCPAT_UPPER_RC = [
+  ['①','支間中央部：主桁直角方向の桁下面又は側面の鉛直ひびわれ'],
+  ['②','支間中央部：主桁下面縦方向ひびわれ'],
+  ['③','支間1/4部：主桁直角方向の桁下面又は側面の鉛直又は斜めひびわれ'],
+  ['④','支点部：支点付近の腹部に斜めに発生しているひびわれ'],
+  ['⑤','支点部：支承上の桁下面又は側面に鉛直に発生しているひびわれ'],
+  ['⑥','支点部：支承上の桁側面に斜めに発生しているひびわれ'],
+  ['⑦','支点部：ゲルバー部のひびわれ'],
+  ['⑧','支点部：連続桁中間支点部の上側の鉛直ひびわれ'],
+  ['⑨','その他：亀甲状・くもの巣状のひびわれ'],
+  ['⑩','その他：桁腹部に規則的な間隔で鉛直方向に発生しているひびわれ'],
+  ['⑪','その他：ウェブと上フランジの接合点付近の水平方向のひびわれ'],
+  ['⑫','その他：桁全体に発生している斜め45°方向のひびわれ'],
+  ['⑬','支間1/4部・支点部：桁下面又は側面の橋軸方向ひびわれ'],
+  ['⑭','支間1/4部・支点部：上フランジのひびわれ'],
+  ['⑮','支間全体：桁腹部に発生している水平方向ひびわれ'],
+  ['⑯','横桁部のひびわれ'],
+];
+const CONCPAT_UPPER_PC = [
+  ['⑬(PC)','支間中央部：変断面桁の下フランジのPC鋼材に沿ったひびわれ'],
+  ['⑭(PC)','支間1/4部：PC連続中間支点変局点付近のPC鋼材に沿ったひびわれ'],
+  ['⑮(PC)','支間1/4部：PC連続中間支点変局点付近のPC鋼材に直交したひびわれ'],
+  ['⑯(PC)','その他：PC鋼材定着部又は偏向部付近のひびわれ'],
+  ['⑰','その他：PC鋼材が集中している付近のひびわれ'],
+  ['⑱','支間中央部：主桁上フランジ付近のひびわれ'],
+  ['⑲','支点部：主桁の腹部に水平なひびわれ'],
+  ['⑳','その他：シースに沿って生じるひびわれ'],
+  ['㉕','支点部：連結横桁部（RC構造部）のひびわれ'],
+  ['㉖','その他：セグメント接合部のすき・離れ'],
+  ['㉗','その他：断面急変部のひびわれ'],
+];
+const CONCPAT_LOWER = [
+  ['①','橋台全面：規則性のある鉛直又は斜めひびわれ'],
+  ['②','打ち継ぎ目に鉛直な又は斜めのひびわれ'],
+  ['③','鉄筋段落とし付近のひびわれ'],
+  ['④','亀甲状・くもの巣状のひびわれ'],
+  ['⑤','支承下部：支承下面付近のひびわれ'],
+  ['⑥','T型橋脚：張り出し部の付け根上側のひびわれ'],
+  ['⑦','T型橋脚：橋脚中心上部の鉛直ひびわれ'],
+  ['⑧','T型橋脚：張り出し部の付け根下側のひびわれ'],
+  ['⑨','ラーメン橋脚：柱上下端のハンチ境界部・断面周方向のひびわれ'],
+  ['⑩','ラーメン橋脚：柱全周にわたるひびわれ'],
+  ['⑪','ラーメン橋脚：柱上部ハンチ区間内・断面周方向のひびわれ（⑨除く）'],
+  ['⑫','ラーメン橋脚：はり中央部下側のひびわれ'],
+  ['⑬','T型橋脚：側面の鉛直方向ひびわれ'],
+];
+
+function getConcPatOpts(memberType, superMat) {
+  if (/下部工|橋台|橋脚|基礎|杭|フーチング|躯体/.test(memberType)) return CONCPAT_LOWER;
+  const isPC = /^PC/.test(memberType) || superMat === 'PC';
+  return isPC ? [...CONCPAT_UPPER_RC, ...CONCPAT_UPPER_PC] : CONCPAT_UPPER_RC;
+}
+
+function buildConcPatSelect(bi, si, mi, val) {
+  const m = bridges[bi].spans[si].members[mi];
+  const opts = getConcPatOpts(m.type || '', _superMat || '');
+  const found = opts.find(([v]) => v === val);
+  const optsHtml = opts.map(([v, t]) =>
+    `<option value="${v}" title="${t}"${val===v?' selected':''}>${v}</option>`
+  ).join('');
+  const extra = val && !found ? `<option value="${val}" selected>${val}</option>` : '';
+  return `<select id="concpat-${bi}-${si}-${mi}"
+    style="font-size:11px;max-width:68px"
+    title="${found ? found[1] : 'ひびわれパターンを選択'}"
+    onchange="bridges[${bi}].spans[${si}].members[${mi}].d.concPat=this.value||null;
+      const s=document.getElementById('concpat-${bi}-${si}-${mi}');
+      if(s){const o=getConcPatOpts(bridges[${bi}].spans[${si}].members[${mi}].type||'',_superMat||'');
+      const f=o.find(([v])=>v===s.value);s.title=f?f[1]:'';}">
+    <option value="">—</option>${optsHtml}${extra}
+  </select>`;
+}
+
 const ANTICOR_MAP = {
   '1': {a:'a', b:'c', c:'d', d:'e', e:'e'},
   '2': {a:'a', b:'c', c:'e', d:'e', e:'e'},
