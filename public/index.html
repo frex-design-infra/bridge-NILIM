@@ -2800,25 +2800,32 @@ function saveSupabaseConfig() {
 // SUPABASE データ操作
 // ============================================================
 async function loadBridgesFromSupabase() {
+  console.log('[load] start');
   try {
     const res = await fetch('/api/save', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'list', payload: {} })
     });
-    if (!res.ok) return;
+    console.log('[load] fetch status:', res.status);
+    if (!res.ok) {
+      const txt = await res.text();
+      console.error('[load] API error:', txt);
+      showToast(`❌ クラウド読込失敗: ${res.status}`, 'error', 5000);
+      return;
+    }
     const data = await res.json();
+    console.log('[load] received records:', data.length, data);
 
-    // config レコードを取り出して gyomuList を復元（他のrowと混在させない）
+    // config レコードを取り出して gyomuList を復元（Supabaseが正本・localStorageは上書き）
     const configRow = data.find(r => r.management_number === '__nilim_config__');
     if (configRow) {
       _configSbId = configRow.id;
       localStorage.setItem('nilim_config_sb_id', configRow.id);
       const remoteGyomu = configRow.data?.gyomuList || [];
-      // Supabase側のリストを優先しつつ、ローカル追加分もマージ
-      remoteGyomu.forEach(g => {
-        if (!gyomuList.find(x => x.id === g.id)) gyomuList.push(g);
-      });
+      // ローカル追加分（Supabaseに無いもの）を保持
+      const localOnly = gyomuList.filter(g => !remoteGyomu.find(r => r.id === g.id));
+      gyomuList = [...remoteGyomu, ...localOnly];
       saveGyomuList();
     }
 
@@ -2850,12 +2857,19 @@ async function loadBridgesFromSupabase() {
       }
     });
 
+    console.log('[load] gyomuList:', gyomuList);
+    console.log('[load] bridges:', bridges.length, bridges.map(b => ({name:b.name, gyomuId:b.gyomuId})));
+
     renderGyomuCards();
     refreshSidebar('review');
     refreshSidebar('photos');
     refreshExportSummary();
+    if (bridges.length > 0) {
+      showToast(`☁️ クラウドから ${bridges.length}橋 を復元`, 'success');
+    }
   } catch(e) {
-    console.error('load bridges:', e);
+    console.error('[load] error:', e);
+    showToast(`❌ 読込失敗: ${e.message}`, 'error', 5000);
   }
 }
 
