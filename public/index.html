@@ -1381,7 +1381,9 @@ function renderDamageTable(b) {
         } else {
           // a〜e の5段階評価（通常）
           // ⑥ひびわれ漏水の場合: 変更時に concPat セルを連動更新
-          const extraFn = c.key === 'concrete' ? `;updateConcPatCell(${bi},${si},${mi})` : '';
+          // ①腐食の場合: 変更時に防食機能の劣化・分類を自動推定
+          const extraFn = c.key === 'concrete'  ? `;updateConcPatCell(${bi},${si},${mi})`
+                        : c.key === 'corrosion' ? `;autoAntiCor(${bi},${si},${mi})` : '';
           html += `<td class="${cls}">
             <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this,${bi},${si},${mi},'${c.key}')${extraFn}">
               <option value="">-</option>
@@ -1597,11 +1599,55 @@ function getAntiCorOpts(clsVal) {
   return ['a','b','c','d','e'];
 }
 
-// antiCorCls 変更時に antiCor セレクトのオプションを動的更新
+// ①腐食 → ⑤防食機能の劣化・分類 自動推定（要領R0608 p.11-15準拠）
+// 分類1（塗装）: a→a, b→c, c→d, d→e, e→e
+// 分類2（めっき・金属溶射）: a→a, b→c, c→e, d→e, e→e
+// 分類3（耐候性鋼材）: a→a, b→b, c→c, d→d, e→e
+const ANTICOR_MAP = {
+  '1': {a:'a', b:'c', c:'d', d:'e', e:'e'},
+  '2': {a:'a', b:'c', c:'e', d:'e', e:'e'},
+  '3': {a:'a', b:'b', c:'c', d:'d', e:'e'},
+};
+function autoAntiCor(bi, si, mi) {
+  const m   = bridges[bi]?.spans[si]?.members[mi];
+  if (!m) return;
+  const cor = m.d.corrosion || '';
+  if (!cor || cor === '?') return;          // 腐食未設定なら何もしない
+
+  // 分類: 未設定なら '1'（塗装）をデフォルト
+  let cls = m.d.antiCorCls || '';
+  if (!cls) { cls = '1'; m.d.antiCorCls = '1'; }
+
+  // 防食機能の劣化を推定
+  const mapped = ANTICOR_MAP[cls]?.[cor] ?? null;
+  if (mapped && !m.d.antiCor) {            // 既入力値は上書きしない
+    m.d.antiCor = mapped;
+  } else if (mapped) {
+    // 既入力があっても推定値を上書きしてよい（腐食が変わったので）
+    m.d.antiCor = mapped;
+  }
+
+  // DOM を即時更新（テーブル再描画なし・軽量更新）
+  updateAntiCorSelect(bi, si, mi);
+
+  // 分類セレクトも更新
+  const clsSel = document.getElementById(`anticorcls-${bi}-${si}-${mi}`);
+  if (clsSel && clsSel.value !== cls) clsSel.value = cls;
+}
+
+// antiCorCls 変更時: オプション更新 + 腐食から防食機能を再推定
 function updateAntiCorSelect(bi, si, mi) {
-  const m    = bridges[bi].spans[si].members[mi];
-  const cls  = m.d.antiCorCls || '';
-  const val  = m.d.antiCor   || '';
+  const m   = bridges[bi].spans[si].members[mi];
+  const cls = m.d.antiCorCls || '';
+  const cor = m.d.corrosion  || '';
+
+  // 分類が変わり腐食が設定済みなら防食機能を再推定（上書き）
+  if (cls && cor && cor !== '?') {
+    const mapped = ANTICOR_MAP[cls]?.[cor] ?? null;
+    if (mapped) m.d.antiCor = mapped;
+  }
+
+  const val  = m.d.antiCor || '';
   const opts = getAntiCorOpts(cls);
   const sel  = document.getElementById(`anticor-${bi}-${si}-${mi}`);
   if (!sel) return;
