@@ -1433,8 +1433,9 @@ function renderDamageTable(b) {
       }
     });
 
-    // 備考（ポップアップ）
-    const notesLabel = m.notes ? esc(m.notes.length > 10 ? m.notes.slice(0,10)+'…' : m.notes) : '＋';
+    // 備考（ポップアップ）── 改行はスペースに変換してプレビュー
+    const notesFlat  = (m.notes||'').replace(/\n/g,' ');
+    const notesLabel = m.notes ? esc(notesFlat.length > 10 ? notesFlat.slice(0,10)+'…' : notesFlat) : '＋';
     const notesCls   = m.notes ? 'notes-btn' : 'notes-btn empty';
     html += `<td class="notes-col">
       <button class="${notesCls}" title="${esc(m.notes||'備考を追加')}"
@@ -1443,13 +1444,17 @@ function renderDamageTable(b) {
     html += '</tr>';
   });
 
-  // その他
-  if (span.others) {
+  // その他（ポップアップ）── 常に行を表示
+  {
+    const ov    = span.others || null;
+    const oFlat = (ov||'').replace(/\n/g,' ');
+    const oLbl  = ov ? esc(oFlat.length > 14 ? oFlat.slice(0,14)+'…' : oFlat) : '＋';
+    const oCls  = ov ? 'notes-btn' : 'notes-btn empty';
     html += `<tr>
       <td class="member-label">その他</td>
-      <td colspan="${cols.length-1}" style="text-align:left;padding:4px 6px">
-        <input type="text" value="${esc(span.others)}" style="width:100%;text-align:left"
-          oninput="bridges[${selBridge}].spans[${selSpan}].others=this.value">
+      <td colspan="${cols.length-1}" style="text-align:left;padding:3px 6px">
+        <button class="${oCls}" title="${esc(ov||'その他を追加')}"
+          onclick="openNotesModal(${bi},${si},-1,'others')">${oLbl}</button>
       </td></tr>`;
   }
 
@@ -1500,27 +1505,41 @@ function toggleRepair(bi, checked) {
   renderDamageTable(bridges[bi]);
 }
 
-// 備考ポップアップ
-let _notesBi=-1, _notesSi=-1, _notesMi=-1;
-function openNotesModal(bi, si, mi) {
-  _notesBi=bi; _notesSi=si; _notesMi=mi;
-  const m = bridges[bi]?.spans[si]?.members[mi];
-  const memberLabel = m ? `${m.type||''}${m.no!=null?' No.'+m.no:''}` : '';
-  document.getElementById('notes-modal-title').textContent = `備考　${memberLabel}`;
-  document.getElementById('notes-modal-ta').value = m?.notes || '';
+// 備考・その他 共通ポップアップ
+// type: 'notes'（部材備考）| 'others'（径間その他）
+let _notesBi=-1, _notesSi=-1, _notesMi=-1, _notesType='notes';
+function openNotesModal(bi, si, mi, type='notes') {
+  _notesBi=bi; _notesSi=si; _notesMi=mi; _notesType=type;
+  let val, title;
+  if (type === 'others') {
+    val   = bridges[bi]?.spans[si]?.others || '';
+    title = 'その他';
+  } else {
+    const m = bridges[bi]?.spans[si]?.members[mi];
+    val   = m?.notes || '';
+    const lbl = m ? `${m.type||''}${m.no!=null?' No.'+m.no:''}` : '';
+    title = `備考　${lbl}`;
+  }
+  document.getElementById('notes-modal-title').textContent = title;
+  document.getElementById('notes-modal-ta').value = val;
   document.getElementById('notes-modal').classList.add('open');
   setTimeout(()=>document.getElementById('notes-modal-ta').focus(), 60);
 }
 function notesModalSave() {
   if (_notesBi < 0) return;
-  const val = document.getElementById('notes-modal-ta').value.trim();
-  bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = val || null;
+  const val = document.getElementById('notes-modal-ta').value;  // trimしない（改行保持）
+  if (_notesType === 'others') {
+    bridges[_notesBi].spans[_notesSi].others = val.trim() || null;
+  } else {
+    bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = val.trim() || null;
+  }
   document.getElementById('notes-modal').classList.remove('open');
   renderDamageTable(bridges[_notesBi]);
 }
 function notesModalDelete() {
   if (_notesBi < 0) return;
-  bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = null;
+  if (_notesType === 'others') { bridges[_notesBi].spans[_notesSi].others = null; }
+  else { bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = null; }
   document.getElementById('notes-modal').classList.remove('open');
   renderDamageTable(bridges[_notesBi]);
 }
