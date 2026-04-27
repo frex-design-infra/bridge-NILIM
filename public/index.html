@@ -81,11 +81,11 @@ td.notes-col input { text-align: left; }
 
 /* 橋梁リスト */
 .bridge-list { display: flex; flex-direction: column; gap: 6px; }
-.bridge-item { display: flex; align-items: center; gap: 10px; padding: 10px 13px; background: #fafbfc; border: 1px solid #e8eaed; border-radius: 6px; cursor: pointer; transition: all 0.15s; }
+.bridge-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: #fafbfc; border: 1px solid #e8eaed; border-radius: 5px; cursor: pointer; transition: all 0.15s; }
 .bridge-item:hover { background: #eef7fd; border-color: #5dade2; }
 .bridge-item.selected { background: #e3f2fd; border-color: #1e3a5f; }
-.bridge-item .bname { font-weight: 600; flex: 1; font-size: 13px; }
-.bridge-item .broute { color: #888; font-size: 11px; }
+.bridge-item .bname { font-weight: 600; flex: 1; font-size: 12px; }
+.bridge-item .broute { color: #888; font-size: 10px; }
 
 /* ステータスアイコン */
 .status-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
@@ -137,18 +137,18 @@ td.notes-col input { text-align: left; }
 .match-pending { color: #888; }
 
 /* サイドバーレイアウト */
-.sidebar-layout { display: flex; gap: 16px; }
-.sidebar { width: 240px; flex-shrink: 0; }
+.sidebar-layout { display: flex; gap: 12px; }
+.sidebar { width: 200px; flex-shrink: 0; }
 .sidebar-body { flex: 1; min-width: 0; }
 
 /* 確認タブ：業務セクション */
-.rev-gyomu-label { font-size:10px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:0 4px 5px; }
-.rev-gyomu-item { display:flex; align-items:center; gap:6px; padding:7px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px; transition:background 0.12s; }
+.rev-gyomu-label { font-size:9px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:0 4px 4px; }
+.rev-gyomu-item { display:flex; align-items:center; gap:4px; padding:5px 8px; border-radius:5px; cursor:pointer; margin-bottom:2px; transition:background 0.12s; }
 .rev-gyomu-item:hover { background:#eef7fd; }
 .rev-gyomu-item.active { background:#1e3a5f; color:white; }
-.rev-gyomu-item .rgi-name { flex:1; font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.rev-gyomu-item .rgi-cnt { font-size:10px; flex-shrink:0; opacity:0.65; }
-.rev-bridge-label { font-size:10px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:8px 4px 5px; border-top:1px solid #eee; margin-top:4px; }
+.rev-gyomu-item .rgi-name { flex:1; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.rev-gyomu-item .rgi-cnt { font-size:9px; flex-shrink:0; opacity:0.65; }
+.rev-bridge-label { font-size:9px; font-weight:700; color:#aaa; letter-spacing:0.6px; padding:6px 4px 4px; border-top:1px solid #eee; margin-top:3px; }
 
 /* パンくず */
 .review-breadcrumb { display:flex; align-items:center; gap:6px; font-size:13px; color:#1e3a5f; font-weight:600; margin-bottom:4px; flex-wrap:wrap; }
@@ -172,6 +172,19 @@ td.notes-col input { text-align: left; }
 .approval-panel { background: #f8f9fb; border: 1px solid #dce0e8; border-radius: 6px; padding: 12px 16px; }
 .approval-list { margin-top: 8px; font-size: 12px; }
 .approval-list li { padding: 3px 0; color: #555; list-style: none; }
+
+/* 備考ポップアップ */
+#notes-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.38); z-index:9100; align-items:center; justify-content:center; }
+#notes-modal.open { display:flex; }
+.notes-modal-card { background:white; border-radius:10px; padding:20px; width:360px; box-shadow:0 8px 32px rgba(0,0,0,0.22); }
+.notes-modal-card h3 { margin:0 0 10px; font-size:13px; color:#1e3a5f; }
+.notes-modal-card textarea { width:100%; height:90px; border:1px solid #ccd0d9; border-radius:6px; padding:8px; font-size:13px; resize:vertical; box-sizing:border-box; font-family:inherit; }
+.notes-modal-actions { display:flex; gap:8px; margin-top:10px; justify-content:flex-end; }
+/* 備考セル */
+td.notes-col { text-align:left; min-width:60px; }
+.notes-btn { background:none; border:1px solid #ddd; border-radius:4px; cursor:pointer; font-size:11px; padding:2px 6px; color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100px; }
+.notes-btn:hover { background:#eef7fd; border-color:#5dade2; }
+.notes-btn.empty { color:#bbb; border-style:dashed; }
 
 /* 評価対象外セル */
 td.col-na { background: #e8e8e8; cursor: default; }
@@ -216,6 +229,19 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
 <body>
 
 <div id="toast-container"></div>
+
+<!-- 備考ポップアップ -->
+<div id="notes-modal">
+  <div class="notes-modal-card">
+    <h3 id="notes-modal-title">備考</h3>
+    <textarea id="notes-modal-ta" placeholder="備考を入力…"></textarea>
+    <div class="notes-modal-actions">
+      <button onclick="notesModalDelete()" style="background:#fff0f0;border:1px solid #ffcdd2;color:#c62828;border-radius:5px;padding:5px 14px;cursor:pointer;font-size:12px">削除</button>
+      <button onclick="notesModalCancel()" style="background:#f5f5f5;border:1px solid #ddd;border-radius:5px;padding:5px 14px;cursor:pointer;font-size:12px">キャンセル</button>
+      <button onclick="notesModalSave()" style="background:#1e3a5f;color:white;border:none;border-radius:5px;padding:5px 16px;cursor:pointer;font-size:12px;font-weight:600">保存</button>
+    </div>
+  </div>
+</div>
 
 <header>
   <h1>国総研調書作成ツール</h1>
@@ -1407,11 +1433,13 @@ function renderDamageTable(b) {
       }
     });
 
-    // 備考
+    // 備考（ポップアップ）
+    const notesLabel = m.notes ? esc(m.notes.length > 10 ? m.notes.slice(0,10)+'…' : m.notes) : '＋';
+    const notesCls   = m.notes ? 'notes-btn' : 'notes-btn empty';
     html += `<td class="notes-col">
-      <input type="text" value="${esc(m.notes||'')}" style="min-width:120px"
-        oninput="bridges[${bi}].spans[${si}].members[${mi}].notes=this.value">
-      </td>`;
+      <button class="${notesCls}" title="${esc(m.notes||'備考を追加')}"
+        onclick="openNotesModal(${bi},${si},${mi})">${notesLabel}</button>
+    </td>`;
     html += '</tr>';
   });
 
@@ -1471,6 +1499,38 @@ function toggleRepair(bi, checked) {
   bridges[bi].hasRepair = checked;
   renderDamageTable(bridges[bi]);
 }
+
+// 備考ポップアップ
+let _notesBi=-1, _notesSi=-1, _notesMi=-1;
+function openNotesModal(bi, si, mi) {
+  _notesBi=bi; _notesSi=si; _notesMi=mi;
+  const m = bridges[bi]?.spans[si]?.members[mi];
+  const memberLabel = m ? `${m.type||''}${m.no!=null?' No.'+m.no:''}` : '';
+  document.getElementById('notes-modal-title').textContent = `備考　${memberLabel}`;
+  document.getElementById('notes-modal-ta').value = m?.notes || '';
+  document.getElementById('notes-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('notes-modal-ta').focus(), 60);
+}
+function notesModalSave() {
+  if (_notesBi < 0) return;
+  const val = document.getElementById('notes-modal-ta').value.trim();
+  bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = val || null;
+  document.getElementById('notes-modal').classList.remove('open');
+  renderDamageTable(bridges[_notesBi]);
+}
+function notesModalDelete() {
+  if (_notesBi < 0) return;
+  bridges[_notesBi].spans[_notesSi].members[_notesMi].notes = null;
+  document.getElementById('notes-modal').classList.remove('open');
+  renderDamageTable(bridges[_notesBi]);
+}
+function notesModalCancel() {
+  document.getElementById('notes-modal').classList.remove('open');
+}
+// モーダル外クリックで閉じる
+document.getElementById('notes-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('notes-modal')) notesModalCancel();
+});
 
 // 業務毎「変更赤字」チェックボックス切り替え
 function toggleGyomuShowChanges(id, checked) {
@@ -1910,11 +1970,12 @@ function fuzzyMatchOpts(val, opts) {
 //    材料名なしの場合は「鋼桁」として扱い、コンクリート系損傷をNAにする
 const NA_RULES = [
   // PC床版（⑥〜⑨・⑩◎、鋼材系①〜⑤外）
+  // PC床版（ひびわれ漏水は床版の損傷ではないためNA、PC定着部は対象）
   { match: /PC床版|床版\(PC\)/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','roadSurf','bearFunc','settlement','scour']) },
-  // RC床版・床版（材料不明を含む）（⑥〜⑨◎、鋼材系①〜⑤・⑩外）
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','roadSurf','bearFunc','settlement','scour']) },
+  // RC床版・床版（材料不明）（⑨床版ひびわれ◎、ひびわれ漏水は床版では発生しないためNA）
   { match: /床版/,
-    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
+    na: new Set(['corrosion','crack','boltLoss','fracture','antiCor','antiCorCls','concrete','concPat','pcAnchor','roadSurf','bearFunc','settlement','scour']) },
   // 下部工・橋台・橋脚・躯体（常にRC: ⑥〜⑧・⑭・⑮◎、鋼材系①〜⑤外）
   // ※ テンプレートの部材種別は「下部工」で記載（橋台・橋脚は番号で区別）
   { match: /下部工|橋台|橋脚|躯体/,
