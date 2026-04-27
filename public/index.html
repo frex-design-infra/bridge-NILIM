@@ -1444,7 +1444,7 @@ function renderDamageTable(b) {
     html += '</tr>';
   });
 
-  // その他（ポップアップ）── 常に行を表示
+  // その他（ポップアップ）── 常に行を表示（si は forEach 外なので selSpan を直接使用）
   {
     const ov    = span.others || null;
     const oFlat = (ov||'').replace(/\n/g,' ');
@@ -1454,7 +1454,7 @@ function renderDamageTable(b) {
       <td class="member-label">その他</td>
       <td colspan="${cols.length-1}" style="text-align:left;padding:3px 6px">
         <button class="${oCls}" title="${esc(ov||'その他を追加')}"
-          onclick="openNotesModal(${bi},${si},-1,'others')">${oLbl}</button>
+          onclick="openNotesModal(${selBridge},${selSpan},-1,'others')">${oLbl}</button>
       </td></tr>`;
   }
 
