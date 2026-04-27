@@ -1229,6 +1229,69 @@ function refreshReviewSidebar() {
 }
 
 // ============================================================
+// 諸元1 ⇔ 上部工諸元 のリンク
+// ============================================================
+// 上部構造形式から材料区分を導出（例: "鋼溶接・I桁非合成" → "鋼溶接橋"）
+function deriveMaterialClass(superStructure) {
+  if (!superStructure) return '';
+  const parts = String(superStructure).split(/[・･]/);
+  let mat = (parts[0]||'').trim();
+  if (mat && !mat.endsWith('橋')) mat += '橋';
+  return mat;
+}
+
+// 諸元1の上部構造形式を全径間の上部工諸元に反映
+function syncSpanInfoFromShogen(bi) {
+  const b = bridges[bi]; if (!b) return;
+  if (!Array.isArray(b.spanInfo)) b.spanInfo = [];
+  const ss = b.superStructure || '';
+  const mat = deriveMaterialClass(ss);
+  b.spanInfo.forEach(si => {
+    si.structureType = ss;
+    si.materialClass = mat;
+  });
+  if (selReviewSubtab === 'kamibu') renderKamibuEditor(b);
+}
+
+// 諸元1の総径間数に合わせて spanInfo[] と spans[] の数を増減
+function syncSpanCount(bi) {
+  const b = bridges[bi]; if (!b) return;
+  const m = String(b.totalSpans||'').match(/(\d+)/);
+  const target = m ? parseInt(m[1]) : 0;
+  if (!target || target < 1) return;
+  if (!Array.isArray(b.spanInfo)) b.spanInfo = [];
+  if (!Array.isArray(b.spans)) b.spans = [];
+  // 上部工諸元
+  while (b.spanInfo.length < target) {
+    const idx = b.spanInfo.length + 1;
+    b.spanInfo.push({
+      spanNumber: String(idx),
+      materialClass: deriveMaterialClass(b.superStructure || ''),
+      structureType: b.superStructure || '',
+      girderCount:'', spanLength:'', slabMaterial:'',
+      startBearingId:'', startBearing:'', startExpansion:'',
+      endBearingId:'',   endBearing:'',   endExpansion:''
+    });
+  }
+  while (b.spanInfo.length > target) b.spanInfo.pop();
+  // 損傷データ径間（spans）も同期：あくまで径間数だけ増減、既存データは保持
+  while (b.spans.length < target) {
+    b.spans.push({ spanNumber: b.spans.length+1, members:[], others:'', inspYear:'', structType:'' });
+  }
+  while (b.spans.length > target) b.spans.pop();
+
+  if (selReviewSubtab === 'kamibu') renderKamibuEditor(b);
+  if (selReviewSubtab === 'damage') renderDamageTable(b);
+}
+
+// 橋梁諸元のフィールド変更フック（同期処理を一元化）
+function setShogenField(bi, key, value) {
+  bridges[bi][key] = value;
+  if (key === 'superStructure') syncSpanInfoFromShogen(bi);
+  else if (key === 'totalSpans') syncSpanCount(bi);
+}
+
+// ============================================================
 // REVIEW TAB
 // ============================================================
 let selReviewSubtab = 'shogen';   // 確認・編集タブ内のサブタブ状態
@@ -1413,12 +1476,12 @@ function renderReview(b) {
       const dateVal = raw.replace(/\//g, '-').replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3');
       return `<div class="form-group"><label>${f.label}</label>
         <input type="date" value="${esc(dateVal)}"
-          oninput="bridges[${selBridge}]['${f.key}']=this.value"
+          oninput="setShogenField(${selBridge}, '${f.key}', this.value)"
           style="padding:6px 9px;border:1px solid #dce0e8;border-radius:5px;font-size:13px;font-family:inherit;width:100%">
       </div>`;
     }
     if (!f.opts) {
-      return `<div class="form-group"><label>${f.label}</label><input type="text" value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value"></div>`;
+      return `<div class="form-group"><label>${f.label}</label><input type="text" value="${val}" oninput="setShogenField(${selBridge}, '${f.key}', this.value)"></div>`;
     }
     const items = f.opts.map(o =>
       `<div class="combo-item${o===bridges[selBridge][f.key]?' combo-selected':''}" data-val="${esc(o)}"
@@ -1427,7 +1490,7 @@ function renderReview(b) {
     return `<div class="form-group"><label>${f.label}</label>
       <div class="combo-wrap">
         <input type="text" class="combo-input" id="ci-${f.key}" value="${val}"
-          oninput="bridges[${selBridge}]['${f.key}']=this.value;filterCombo('${f.key}',this.value)"
+          oninput="setShogenField(${selBridge}, '${f.key}', this.value);filterCombo('${f.key}',this.value)"
           onfocus="openCombo('${f.key}')" onblur="closeComboDelay('${f.key}')">
         <button type="button" class="combo-btn" onclick="toggleCombo('${f.key}')">▾</button>
         <div class="combo-list" id="cl-${f.key}">${items}</div>
@@ -1538,8 +1601,14 @@ function renderKamibuEditor(b) {
     </div>`;
   }).join('');
 
-  el.innerHTML = blocksHtml +
-    `<button onclick="addKamibuSpan()"
+  el.innerHTML = `
+    <div style="background:#fffbe8;border:1px solid #ddc266;border-radius:5px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#6b5a00;display:flex;align-items:center;gap:10px">
+      <span>💡 諸元1の「上部構造形式」「総径間数」を変更すると、ここの構造形式・材料区分・径間数が自動で同期されます</span>
+      <button onclick="syncSpanInfoFromShogen(${selBridge});syncSpanCount(${selBridge})"
+        style="background:#1e3a5f;color:white;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">手動同期</button>
+    </div>
+    ${blocksHtml}
+    <button onclick="addKamibuSpan()"
       style="background:#1e3a5f;color:white;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:13px">+ 径間を追加</button>`;
 }
 
@@ -2585,7 +2654,12 @@ function pickCombo(key, bi, val, e) {
   e.preventDefault();
   const ci = document.getElementById('ci-'+key);
   if (ci) ci.value = val;
-  bridges[bi][key] = val;
+  // 諸元1の同期対象キーは setShogenField 経由で更新（上部工に伝播）
+  if (key === 'superStructure' || key === 'totalSpans') {
+    setShogenField(bi, key, val);
+  } else {
+    bridges[bi][key] = val;
+  }
   const cl = document.getElementById('cl-'+key);
   if (cl) {
     cl.style.display = 'none';
