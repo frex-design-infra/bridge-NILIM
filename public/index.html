@@ -23,6 +23,11 @@ header .sub { margin-left: auto; font-size: 11px; opacity: 0.6; }
 .tab:hover { color: white; background: rgba(255,255,255,0.08); }
 .tab.active { color: white; border-bottom-color: #5dade2; background: rgba(255,255,255,0.06); }
 
+/* 確認・編集タブ内のサブタブ */
+.rev-subtab { padding: 8px 18px; cursor: pointer; font-size: 13px; color: #777; border-bottom: 3px solid transparent; margin-bottom: -2px; user-select: none; transition: all 0.12s; font-weight: 500; }
+.rev-subtab:hover { color: #1e3a5f; background: #f0f3f7; }
+.rev-subtab.active { color: #1e3a5f; border-bottom-color: #1e3a5f; background: white; font-weight: 600; }
+
 /* コンテンツ */
 .content { display: none; padding: 20px 24px; max-width: 1500px; margin: 0 auto; }
 .content.active { display: block; }
@@ -296,27 +301,37 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
           </div>
         </div>
 
-        <div class="card" id="card-shogen">
+        <!-- サブタブナビゲーション -->
+        <div id="review-subtabs" style="display:flex;gap:4px;margin-bottom:10px;border-bottom:2px solid #dce0e8;flex-wrap:wrap">
+          <div class="rev-subtab active" data-tab="shogen"  onclick="selectReviewSubtab('shogen')">📋 諸元1</div>
+          <div class="rev-subtab"        data-tab="shogen2" onclick="selectReviewSubtab('shogen2')">📋 諸元2</div>
+          <div class="rev-subtab"        data-tab="kamibu"  onclick="selectReviewSubtab('kamibu')">🌉 上部工</div>
+          <div class="rev-subtab"        data-tab="shimobu" onclick="selectReviewSubtab('shimobu')">🏛️ 下部工</div>
+          <div class="rev-subtab"        data-tab="repair"  onclick="selectReviewSubtab('repair')">🔧 補修履歴</div>
+          <div class="rev-subtab"        data-tab="damage"  onclick="selectReviewSubtab('damage')">⚠️ 損傷評価</div>
+        </div>
+
+        <div class="card rev-pane" id="card-shogen" data-pane="shogen">
           <h2>橋梁諸元 <span class="badge badge-info" style="font-size:10px">様式1</span></h2>
           <div class="form-grid" id="form-shogen"></div>
         </div>
-        <div class="card" id="card-shogen2">
+        <div class="card rev-pane" id="card-shogen2" data-pane="shogen2" style="display:none">
           <h2>橋梁諸元2 <span class="badge badge-info" style="font-size:10px">様式</span></h2>
           <div class="form-grid" id="form-shogen2"></div>
         </div>
-        <div class="card" id="card-kamibu">
+        <div class="card rev-pane" id="card-kamibu" data-pane="kamibu" style="display:none">
           <h2>上部工諸元 <span class="badge badge-info" style="font-size:10px">径間ごと</span></h2>
           <div id="kamibu-editor"></div>
         </div>
-        <div class="card" id="card-shimobu">
+        <div class="card rev-pane" id="card-shimobu" data-pane="shimobu" style="display:none">
           <h2>下部工諸元 <span class="badge badge-info" style="font-size:10px">躯体</span></h2>
           <div id="shimobu-editor"></div>
         </div>
-        <div class="card" id="card-repair">
+        <div class="card rev-pane" id="card-repair" data-pane="repair" style="display:none">
           <h2>補修履歴</h2>
           <div id="repair-editor"></div>
         </div>
-        <div class="card" id="card-damage">
+        <div class="card rev-pane" id="card-damage" data-pane="damage" style="display:none">
           <h2>損傷程度の評価 <span class="badge badge-info" style="font-size:10px">様式2</span>
             <span id="span-tabs" style="margin-left:12px;font-weight:400;font-size:12px"></span>
           </h2>
@@ -1216,6 +1231,20 @@ function refreshReviewSidebar() {
 // ============================================================
 // REVIEW TAB
 // ============================================================
+let selReviewSubtab = 'shogen';   // 確認・編集タブ内のサブタブ状態
+
+function selectReviewSubtab(name) {
+  selReviewSubtab = name;
+  // タブのactiveクラス切替
+  document.querySelectorAll('.rev-subtab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === name);
+  });
+  // ペインの表示切替
+  document.querySelectorAll('.rev-pane').forEach(p => {
+    p.style.display = (p.dataset.pane === name) ? '' : 'none';
+  });
+}
+
 function selectBridge(i) {
   selBridge  = i;
   selSpan    = 0;
@@ -1423,6 +1452,9 @@ function renderReview(b) {
   }
 
   renderDamageTable(b);
+
+  // 現在のサブタブ状態を反映（ペインの表示切替）
+  selectReviewSubtab(selReviewSubtab);
 }
 
 // ============================================================
