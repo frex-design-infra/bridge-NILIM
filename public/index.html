@@ -1334,6 +1334,14 @@ function renderDamageTable(b) {
 
     const naSet = getNACols(m.type, _superMat);
 
+    // 腐食が設定済みで防食機能が未設定 → レンダリング時に自動補完（インポート済みデータも対応）
+    if (m.d.corrosion && m.d.corrosion !== '?' &&
+        !naSet.has('corrosion') && !naSet.has('antiCor') && !m.d.antiCor) {
+      if (!m.d.antiCorCls) m.d.antiCorCls = '1';
+      const _mapped = ANTICOR_MAP[m.d.antiCorCls]?.[m.d.corrosion];
+      if (_mapped) m.d.antiCor = _mapped;
+    }
+
     cols.slice(2, -1).forEach(c => {
       if (c.type === 'notes') return;
       const val = m.d[c.key];
