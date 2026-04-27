@@ -470,6 +470,16 @@ function deleteGyomu(id) {
   ['review','photos'].forEach(t => refreshSidebar(t));
 }
 
+function deleteBridge(bi) {
+  const b = bridges[bi];
+  if (!confirm(`「${b?.name||'(名称不明)'}」を削除しますか？`)) return;
+  bridges.splice(bi, 1);
+  if (selBridge === bi) { selBridge = -1; }
+  else if (selBridge > bi) { selBridge--; }
+  renderGyomuCards();
+  ['review','photos'].forEach(t => refreshSidebar(t));
+}
+
 function renderGyomuCards() {
   const el = document.getElementById('gyomu-cards');
   if (!gyomuList.length) {
@@ -479,11 +489,17 @@ function renderGyomuCards() {
   el.innerHTML = gyomuList.map(g => {
     const gb = bridges.filter(b => b.gyomuId === g.id);
     const rows = gb.length
-      ? gb.map(b => `<div class="gyomu-bridge-mini">
-          <div class="status-icon si-ok" style="width:14px;height:14px;font-size:9px;flex-shrink:0">✓</div>
-          <span class="bm-name">${esc(b.name||'(名称不明)')}</span>
-          <span style="color:#bbb;font-size:11px;flex-shrink:0">${b.spans.length}径間</span>
-        </div>`).join('')
+      ? gb.map(b => {
+          const bi = bridges.indexOf(b);
+          return `<div class="gyomu-bridge-mini">
+            <div class="status-icon si-ok" style="width:14px;height:14px;font-size:9px;flex-shrink:0">✓</div>
+            <span class="bm-name">${esc(b.name||'(名称不明)')}</span>
+            <span style="color:#bbb;font-size:11px;flex-shrink:0">${b.spans.length}径間</span>
+            <button onclick="deleteBridge(${bi})" title="この橋梁を削除"
+              style="margin-left:4px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
+              onmouseover="this.style.color='#c62828'" onmouseout="this.style.color='#ccc'">×</button>
+          </div>`;
+        }).join('')
       : '<div style="color:#bbb;font-size:12px;text-align:center;padding:12px">橋梁未登録</div>';
     return `
     <div class="gyomu-card">
