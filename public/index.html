@@ -464,12 +464,24 @@ function loadTemplate(file) {
 // ============================================================
 // 業務管理
 // ============================================================
+const GYOMU_LS_KEY = 'nilim_gyomu_list';
+function saveGyomuList() {
+  try { localStorage.setItem(GYOMU_LS_KEY, JSON.stringify(gyomuList)); } catch {}
+}
+function loadGyomuList() {
+  try {
+    const s = localStorage.getItem(GYOMU_LS_KEY);
+    if (s) gyomuList = JSON.parse(s);
+  } catch {}
+}
+
 function promptAddGyomu() {
   const name = prompt('業務名を入力してください\n例：〇〇市 令和6年度 道路橋定期点検業務');
   if (!name || !name.trim()) return;
   const id = genId();
   gyomuList.push({ id, name: name.trim(), showChanges: false });
   _accExpanded[id] = true;
+  saveGyomuList();
   renderGyomuCards();
 }
 
@@ -479,6 +491,7 @@ function renameGyomu(id) {
   const name = prompt('業務名を変更してください', g.name);
   if (!name || !name.trim()) return;
   g.name = name.trim();
+  saveGyomuList();
   renderGyomuCards();
   ['review','photos'].forEach(t => {
     if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
@@ -492,6 +505,7 @@ function deleteGyomu(id) {
   gyomuList = gyomuList.filter(x => x.id !== id);
   bridges   = bridges.filter(b => b.gyomuId !== id);
   delete _accExpanded[id];
+  saveGyomuList();
   renderGyomuCards();
   ['review','photos'].forEach(t => refreshSidebar(t));
 }
@@ -2720,6 +2734,15 @@ async function loadBridgesFromSupabase() {
       return b;
     });
 
+    // クラウドから読み込んだ橋梁の gyomuId に対応する業務がなければ自動補完
+    bridges.forEach(b => {
+      if (b.gyomuId && !gyomuList.find(g => g.id === b.gyomuId)) {
+        gyomuList.push({ id: b.gyomuId, name: '（クラウドから復元）', showChanges: false });
+      }
+    });
+    saveGyomuList();
+
+    renderGyomuCards();
     refreshSidebar('review');
     refreshSidebar('photos');
     refreshExportSummary();
@@ -2846,6 +2869,7 @@ window.addEventListener('load', () => {
   document.getElementById('sb-url').value = url;
   document.getElementById('sb-key').value = key;
 
+  loadGyomuList();       // 業務マスタをlocalStorageから先に復元
   initSupabase();
   loadBridgesFromSupabase();
   autoLoadTemplate();
