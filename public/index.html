@@ -1253,6 +1253,26 @@ function syncSpanInfoFromShogen(bi) {
   if (selReviewSubtab === 'kamibu') renderKamibuEditor(b);
 }
 
+// 下部構造形式から材料区分を導出（鋼製→鋼系 / それ以外→コンクリート系）
+function deriveSubWorkMaterial(subStructure) {
+  if (!subStructure) return '';
+  if (/鋼製/.test(String(subStructure))) return '鋼系';
+  return 'コンクリート系';
+}
+
+// 諸元1の下部構造形式を全躯体の下部工諸元に反映
+function syncSubWorkFromShogen(bi) {
+  const b = bridges[bi]; if (!b) return;
+  if (!Array.isArray(b.subWorks)) b.subWorks = [];
+  const ss = b.subStructure || '';
+  const mat = deriveSubWorkMaterial(ss);
+  b.subWorks.forEach(sw => {
+    sw.structureType = ss;
+    sw.material = mat;
+  });
+  if (selReviewSubtab === 'shimobu') renderShimobuEditor(b);
+}
+
 // 諸元1の総径間数に合わせて spanInfo[] と spans[] の数を増減
 function syncSpanCount(bi) {
   const b = bridges[bi]; if (!b) return;
@@ -1287,8 +1307,9 @@ function syncSpanCount(bi) {
 // 橋梁諸元のフィールド変更フック（同期処理を一元化）
 function setShogenField(bi, key, value) {
   bridges[bi][key] = value;
-  if (key === 'superStructure') syncSpanInfoFromShogen(bi);
-  else if (key === 'totalSpans') syncSpanCount(bi);
+  if (key === 'superStructure')      syncSpanInfoFromShogen(bi);
+  else if (key === 'totalSpans')     syncSpanCount(bi);
+  else if (key === 'subStructure')   syncSubWorkFromShogen(bi);
 }
 
 // ============================================================
@@ -1659,6 +1680,11 @@ function renderShimobuEditor(b) {
     </tr>`;
 
   el.innerHTML = `
+    <div style="background:#fffbe8;border:1px solid #ddc266;border-radius:5px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#6b5a00;display:flex;align-items:center;gap:10px">
+      <span>💡 諸元1の「下部構造形式」を変更すると、全躯体の構造形式・材料区分が自動で同期されます</span>
+      <button onclick="syncSubWorkFromShogen(${selBridge})"
+        style="background:#1e3a5f;color:white;border:none;border-radius:4px;padding:4px 10px;cursor:pointer;font-size:11px;flex-shrink:0">手動同期</button>
+    </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px">
       <thead>
         <tr style="background:#f0f3f7;border-bottom:1px solid #dce0e8">
@@ -2654,8 +2680,8 @@ function pickCombo(key, bi, val, e) {
   e.preventDefault();
   const ci = document.getElementById('ci-'+key);
   if (ci) ci.value = val;
-  // 諸元1の同期対象キーは setShogenField 経由で更新（上部工に伝播）
-  if (key === 'superStructure' || key === 'totalSpans') {
+  // 諸元1の同期対象キーは setShogenField 経由で更新（上部工/下部工に伝播）
+  if (key === 'superStructure' || key === 'totalSpans' || key === 'subStructure') {
     setShogenField(bi, key, val);
   } else {
     bridges[bi][key] = val;
