@@ -493,11 +493,12 @@ function renderGyomuCards() {
           const bi = bridges.indexOf(b);
           return `<div class="gyomu-bridge-mini">
             <div class="status-icon si-ok" style="width:14px;height:14px;font-size:9px;flex-shrink:0">✓</div>
-            <span class="bm-name">${esc(b.name||'(名称不明)')}</span>
-            <span style="color:#bbb;font-size:11px;flex-shrink:0">${b.spans.length}径間</span>
+            <span class="bm-name" style="font-weight:600">${esc(b.name||'(名称不明)')}</span>
+            ${b.routeName ? `<span style="color:#bbb;font-size:11px;white-space:nowrap;flex-shrink:0">${esc(b.routeName)}</span>` : ''}
+            <span style="color:#bbb;font-size:11px;flex-shrink:0;margin-left:auto">${b.spans.length}径間</span>
             <button onclick="deleteBridge(${bi})" title="この橋梁を削除"
-              style="margin-left:4px;background:none;border:none;color:#ccc;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
-              onmouseover="this.style.color='#c62828'" onmouseout="this.style.color='#ccc'">×</button>
+              style="background:none;border:none;color:#bbb;cursor:pointer;font-size:13px;padding:0 2px;line-height:1;flex-shrink:0"
+              onmouseover="this.style.color='#c62828'" onmouseout="this.style.color='#bbb'">×</button>
           </div>`;
         }).join('')
       : '<div style="color:#bbb;font-size:12px;text-align:center;padding:12px">橋梁未登録</div>';
@@ -1004,7 +1005,16 @@ function refreshReviewSidebar() {
       gb.forEach(({ b, i }) => {
         const item = document.createElement('div');
         item.className = 'bridge-item' + (i === selBridge ? ' selected' : '');
-        item.innerHTML = `<div><div class="bname">${esc(b.name||'(不明)')}</div><div class="broute">${esc(b.routeName||'')}</div></div>`;
+        item.innerHTML = `
+          <div style="flex:1;min-width:0;overflow:hidden">
+            <div style="display:flex;align-items:baseline;gap:5px;flex-wrap:nowrap;overflow:hidden">
+              <span style="font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(b.name||'(不明)')}</span>
+              ${b.routeName ? `<span style="color:#888;font-size:11px;white-space:nowrap;flex-shrink:0">${esc(b.routeName)}</span>` : ''}
+            </div>
+          </div>
+          <button onclick="event.stopPropagation();deleteBridge(${i})" title="この橋梁を削除"
+            style="background:none;border:none;color:#bbb;cursor:pointer;font-size:15px;padding:0 3px;line-height:1;flex-shrink:0;font-weight:300"
+            onmouseover="this.style.color='#c62828'" onmouseout="this.style.color='#bbb'">×</button>`;
         item.onclick = () => selectBridge(i);
         el.appendChild(item);
       });
