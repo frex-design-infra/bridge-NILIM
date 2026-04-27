@@ -651,10 +651,12 @@ function parseOldExcel(wb, filename) {
     bridgeNumber: '', routeCode: '', constructionYear: '', constructionMonth: '',
     roadType: '', bridgeType: '', latitude: '', longitude: '',
     locationDetail: '', distanceMark: '', salinityClass: '',
-    // 上部工諸元
+    // 上部工諸元（径間ごと）
     spanInfo: [],
     // 下部工諸元
     subWorks: [],
+    // 補修履歴
+    repairHistory: [],
     // 損傷
     spans: [],
     // 補修補強材の損傷チェック（デフォルト false = グレーアウト）
@@ -711,19 +713,55 @@ function parseOldExcel(wb, filename) {
     }
   }
 
-  // --- 上部工諸元 ---
+  // --- 上部工諸元（多径間対応）---
+  // 国総研新形式: 各径間ブロックは「径間番号」ラベル行から始まり14行1セット
   if (wb.Sheets['上部工諸元']) {
     const d = s2a(wb.Sheets['上部工諸元']);
-    const si = {};
-    si.materialClass  = fv(d, '材料区分')    || '';
-    si.structureType  = fv(d, '構造形式')    || '';
-    si.girderCount    = fv(d, '桁本数')      || '';
-    si.spanLength     = fv(d, '支間長')      || '';
-    si.startBearing   = fv(d, '起点側支承種類')    || '';
-    si.endBearing     = fv(d, '終点側支承種類')    || '';
-    si.startExpansion = fv(d, '起点側伸縮装置種類') || '';
-    si.endExpansion   = fv(d, '終点側伸縮装置種類') || '';
-    b.spanInfo = [si];
+    b.spanInfo = [];
+    for (let r = 0; r < d.length; r++) {
+      if (!d[r] || String(d[r][0]||'').trim() !== '径間番号') continue;
+      // ブロック内ローカル関数
+      const g  = (ri, ci) => { const row = d[r+ri]; return row ? String(row[ci]||'').trim() : ''; };
+      const gf = (ri, lbl) => {
+        const row = d[r+ri]; if (!row) return '';
+        for (let c = 0; c < row.length; c++) {
+          if (String(row[c]||'').trim() === lbl) {
+            for (let dc = 1; dc <= 12; dc++) {
+              const v = row[c+dc];
+              if (v !== null && v !== '' && v !== undefined) return String(v).trim();
+            }
+          }
+        }
+        return '';
+      };
+      b.spanInfo.push({
+        spanNumber    : g(0, 4),               // E行目：径間番号値
+        materialClass : g(1, 4),               // 材料区分
+        girderCount   : g(2, 4),               // 桁本数
+        structureType : g(3, 4),               // 構造形式
+        spanLength    : gf(1, '支間長'),       // ラベルから右に検索
+        slabMaterial  : g(4, 10),              // 床版材料（K列）
+        startBearingId: g(9, 10),              // 起点側躯体番号
+        startBearing  : gf(9, '起点側支承種類'),
+        endBearingId  : g(10, 10),             // 終点側躯体番号
+        endBearing    : gf(10, '終点側支承種類'),
+        startExpansion: gf(11, '起点側伸縮装置種類'),
+        endExpansion  : gf(12, '終点側伸縮装置種類'),
+      });
+    }
+    // 旧形式フォールバック（径間番号行が見つからない場合）
+    if (!b.spanInfo.length) {
+      b.spanInfo = [{
+        materialClass : fv(d, '材料区分')         || '',
+        structureType : fv(d, '構造形式')         || '',
+        girderCount   : fv(d, '桁本数')           || '',
+        spanLength    : fv(d, '支間長')           || '',
+        startBearing  : fv(d, '起点側支承種類')    || '',
+        endBearing    : fv(d, '終点側支承種類')    || '',
+        startExpansion: fv(d, '起点側伸縮装置種類') || '',
+        endExpansion  : fv(d, '終点側伸縮装置種類') || '',
+      }];
+    }
   }
 
   // --- 下部工諸元 ---
@@ -738,6 +776,35 @@ function parseOldExcel(wb, filename) {
         if (d[r] && d[r][0]) {
           b.subWorks.push({ id: d[r][0], material: d[r][1]||'', structureType: d[r][3]||'' });
         }
+      }
+    }
+  }
+
+  // --- 補修履歴 ---
+  if (wb.Sheets['補修履歴']) {
+    const d = s2a(wb.Sheets['補修履歴']);
+    let hr = -1;
+    for (let r = 0; r < d.length; r++) {
+      // ヘッダー行を検出（「径間」「番号」「補修」などが含まれる行）
+      if (d[r] && (String(d[r][0]||'').includes('径間') || String(d[r][2]||'').includes('部材'))) {
+        hr = r; break;
+      }
+    }
+    if (hr >= 0) {
+      for (let r = hr + 1; r < d.length; r++) {
+        const row = d[r];
+        if (!row) continue;
+        const vals = row.slice(0, 6).map(c => String(c||'').trim());
+        if (!vals.some(v => v)) continue;
+        b.repairHistory.push({
+          spanNum : vals[0],
+          year    : vals[1],
+          member  : vals[2],
+          memberNo: vals[3],
+          method  : vals[4],
+          note    : vals[5]
+        });
+        if (vals[4]) b.hasRepair = true;
       }
     }
   }
