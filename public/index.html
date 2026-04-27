@@ -2822,13 +2822,23 @@ async function loadBridgesFromSupabase() {
       saveGyomuList();
     }
 
-    // config行を除いて橋梁データに変換
+    // config行を除いて橋梁データに変換（同一橋梁の重複は最新1件に絞る）
+    const seen = new Set();
     bridges = data
       .filter(r => r.management_number !== '__nilim_config__')
+      .filter(r => {
+        const key = `${r.management_number}__${r.name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .map(row => {
         const b = row.data || {};
         b._sbId      = row.id;
         b._approvals = [];
+        // ローカルストレージにIDをキャッシュ（新タブ/リロード後のUPDATE重複防止）
+        const lsKey = `nilim_bid_${row.management_number}__${row.name}`;
+        localStorage.setItem(lsKey, row.id);
         return b;
       });
 
@@ -2894,6 +2904,13 @@ async function saveConfig() {
 }
 
 async function saveBridgeToSupabase(bridge) {
+  // _sbId がメモリにない場合、localStorageキャッシュから復元（新タブ・リロード後の重複INSERT防止）
+  if (!bridge._sbId) {
+    const lsKey = `nilim_bid_${bridge.managementNumber || ''}__${bridge.name || ''}`;
+    const cached = localStorage.getItem(lsKey);
+    if (cached) bridge._sbId = cached;
+  }
+
   const payload = {
     management_number: bridge.managementNumber || null,
     name: bridge.name || null,
@@ -2911,6 +2928,9 @@ async function saveBridgeToSupabase(bridge) {
     const json = await res.json();
     if (!res.ok) return { id: null, error: json.error || res.statusText };
     bridge._sbId = json.id;
+    // IDをlocalStorageにキャッシュ
+    const lsKey = `nilim_bid_${bridge.managementNumber || ''}__${bridge.name || ''}`;
+    localStorage.setItem(lsKey, json.id);
     return { id: json.id, error: null };
   } catch(e) {
     return { id: null, error: e.message };
