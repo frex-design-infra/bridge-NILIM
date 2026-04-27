@@ -300,6 +300,22 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
           <h2>橋梁諸元 <span class="badge badge-info" style="font-size:10px">様式1</span></h2>
           <div class="form-grid" id="form-shogen"></div>
         </div>
+        <div class="card" id="card-shogen2">
+          <h2>橋梁諸元2 <span class="badge badge-info" style="font-size:10px">様式</span></h2>
+          <div class="form-grid" id="form-shogen2"></div>
+        </div>
+        <div class="card" id="card-kamibu">
+          <h2>上部工諸元 <span class="badge badge-info" style="font-size:10px">径間ごと</span></h2>
+          <div id="kamibu-editor"></div>
+        </div>
+        <div class="card" id="card-shimobu">
+          <h2>下部工諸元 <span class="badge badge-info" style="font-size:10px">躯体</span></h2>
+          <div id="shimobu-editor"></div>
+        </div>
+        <div class="card" id="card-repair">
+          <h2>補修履歴</h2>
+          <div id="repair-editor"></div>
+        </div>
         <div class="card" id="card-damage">
           <h2>損傷程度の評価 <span class="badge badge-info" style="font-size:10px">様式2</span>
             <span id="span-tabs" style="margin-left:12px;font-weight:400;font-size:12px"></span>
@@ -555,6 +571,12 @@ function renderGyomuCards() {
       </div>
       <div class="gyomu-card-body">
         <div class="gyomu-bridge-mini-list">${rows}</div>
+        <div style="display:flex;gap:6px;margin-bottom:8px">
+          <button onclick="createEmptyBridge('${g.id}')"
+            style="flex:1;background:#1e3a5f;color:white;border:none;border-radius:5px;padding:7px 10px;cursor:pointer;font-size:12px;font-weight:600">
+            ＋ 新規橋梁を作成
+          </button>
+        </div>
         <div class="gyomu-drop-zone" id="gdrop-${g.id}"
           ondragover="event.preventDefault();this.classList.add('dragover')"
           ondragleave="this.classList.remove('dragover')"
@@ -575,6 +597,48 @@ function handleGyomuDrop(e, gyomuId) {
   e.preventDefault();
   e.currentTarget.classList.remove('dragover');
   handleGyomuFiles(e.dataTransfer.files, gyomuId);
+}
+
+// 空の橋梁を新規作成（Excelインポートなしで一から入力する用）
+function createEmptyBridge(gyomuId) {
+  const name = prompt('橋梁名を入力してください（後で変更可）', '新規橋梁');
+  if (name === null) return;  // キャンセル
+  const b = {
+    filename: '',
+    gyomuId,
+    name: name.trim() || '新規橋梁',
+    routeName:'', managementNumber:'', facilityId:'',
+    locationFrom:'', locationTo:'',
+    manager:'', foundingYear:'', liveLoad:'', designCode:'',
+    bridgeLength:'', totalSpans:'1',
+    superStructure:'', subStructure:'', foundationType:'',
+    inspectionDate:'',
+    coastalDistance:'', emergencyRoute:'', detourRoute:'', underCondition:'',
+    prefName:'', municipalityName:'', officeName:'',
+    bridgeNumber:'', routeCode:'', constructionYear:'', constructionMonth:'',
+    roadType:'', bridgeType:'', latitude:'', longitude:'',
+    locationDetail:'', distanceMark:'', salinityClass:'',
+    spanInfo: [{
+      spanNumber:'1', materialClass:'', structureType:'', girderCount:'',
+      spanLength:'', slabMaterial:'',
+      startBearingId:'A1', startBearing:'', startExpansion:'',
+      endBearingId:'A2',   endBearing:'',   endExpansion:''
+    }],
+    subWorks: [
+      { id:'A1', material:'コンクリート系', structureHeight:'', structureType:'' },
+      { id:'A2', material:'コンクリート系', structureHeight:'', structureType:'' },
+    ],
+    repairHistory: [],
+    spans: [{ spanNumber:1, members:[], others:'', inspYear:'', structType:'' }],
+    hasRepair: false,
+    photos: []
+  };
+  bridges.push(b);
+  renderGyomuCards();
+  // クラウドにも自動保存
+  saveBridgeToSupabase(b).then(r => {
+    if (r.id) showToast('☁️ 新規橋梁を作成・保存しました', 'success');
+  });
 }
 
 function showToast(msg, type='', duration=3000) {
@@ -774,7 +838,12 @@ function parseOldExcel(wb, filename) {
     if (headerRow >= 0) {
       for (let r = headerRow + 1; r < d.length; r++) {
         if (d[r] && d[r][0]) {
-          b.subWorks.push({ id: d[r][0], material: d[r][1]||'', structureType: d[r][3]||'' });
+          b.subWorks.push({
+            id: d[r][0],
+            material: d[r][1]||'',
+            structureHeight: d[r][2]||'',
+            structureType: d[r][3]||''
+          });
         }
       }
     }
@@ -1336,6 +1405,12 @@ function renderReview(b) {
       </div></div>`;
   }).join('');
 
+  // ---- 橋梁諸元2 / 上部工 / 下部工 / 補修履歴のエディタ ----
+  renderShogen2Form(b);
+  renderKamibuEditor(b);
+  renderShimobuEditor(b);
+  renderRepairEditor(b);
+
   // ---- 径間タブ ----
   const spanTabsEl = document.getElementById('span-tabs');
   if (b.spans.length > 1) {
@@ -1348,6 +1423,242 @@ function renderReview(b) {
   }
 
   renderDamageTable(b);
+}
+
+// ============================================================
+// 橋梁諸元2 フォーム
+// ============================================================
+function renderShogen2Form(b) {
+  const el = document.getElementById('form-shogen2');
+  if (!el) return;
+  const fields = [
+    {label:'県名',           key:'prefName'},
+    {label:'地方公共団体名',  key:'municipalityName'},
+    {label:'事務所名',       key:'officeName'},
+    {label:'橋梁番号',       key:'bridgeNumber'},
+    {label:'路線コード',     key:'routeCode'},
+    {label:'道路種別',       key:'roadType', opts:[
+      '高速自動車国道','一般国道','都道府県道',
+      '市町村道 1級','市町村道 2級','市町村道 その他',
+      '農林道','その他']},
+    {label:'橋梁種別',       key:'bridgeType', opts:['橋','BOX','樋門','その他']},
+    {label:'塩害地域',       key:'salinityClass', opts:['該当','該当せず','不明']},
+    {label:'架橋条件',       key:'underCondition'},
+    {label:'架設年（西暦）',  key:'constructionYear'},
+    {label:'架設月',         key:'constructionMonth'},
+  ];
+  el.innerHTML = fields.map(f => {
+    const val = esc(bridges[selBridge][f.key] || '');
+    if (!f.opts) {
+      return `<div class="form-group"><label>${f.label}</label>
+        <input type="text" value="${val}" oninput="bridges[${selBridge}]['${f.key}']=this.value"></div>`;
+    }
+    const items = f.opts.map(o =>
+      `<div class="combo-item${o===bridges[selBridge][f.key]?' combo-selected':''}" data-val="${esc(o)}"
+        onmousedown="pickCombo('${f.key}',${selBridge},this.dataset.val,event)">${esc(o)}</div>`
+    ).join('');
+    return `<div class="form-group"><label>${f.label}</label>
+      <div class="combo-wrap">
+        <input type="text" class="combo-input" id="ci-${f.key}" value="${val}"
+          oninput="bridges[${selBridge}]['${f.key}']=this.value;filterCombo('${f.key}',this.value)"
+          onfocus="openCombo('${f.key}')" onblur="closeComboDelay('${f.key}')">
+        <button type="button" class="combo-btn" onclick="toggleCombo('${f.key}')">▾</button>
+        <div class="combo-list" id="cl-${f.key}">${items}</div>
+      </div></div>`;
+  }).join('');
+}
+
+// ============================================================
+// 上部工諸元エディタ（径間ごと）
+// ============================================================
+function renderKamibuEditor(b) {
+  const el = document.getElementById('kamibu-editor');
+  if (!el) return;
+  if (!b.spanInfo) b.spanInfo = [];
+
+  const blocksHtml = b.spanInfo.map((si, i) => {
+    const f = (key, label, type='text') => {
+      const v = esc(si[key] || '');
+      return `<div class="form-group"><label>${label}</label>
+        <input type="${type}" value="${v}"
+          oninput="bridges[${selBridge}].spanInfo[${i}]['${key}']=this.value"></div>`;
+    };
+    return `<div style="border:1px solid #dce0e8;border-radius:6px;padding:12px;margin-bottom:10px;background:#fafbfd">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <strong style="color:#1e3a5f">第${esc(si.spanNumber||(i+1))}径間</strong>
+        <button onclick="deleteKamibuSpan(${i})"
+          style="background:#fde8e8;border:1px solid #e0a0a0;color:#c62828;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:11px">削除</button>
+      </div>
+      <div class="form-grid">
+        ${f('spanNumber', '径間番号')}
+        ${f('materialClass', '材料区分')}
+        ${f('structureType', '構造形式')}
+        ${f('girderCount', '桁本数')}
+        ${f('spanLength', '支間長(m)')}
+        ${f('slabMaterial', '床版材料')}
+        ${f('startBearingId', '起点側躯体番号')}
+        ${f('startBearing', '起点側支承種類')}
+        ${f('startExpansion', '起点側伸縮装置')}
+        ${f('endBearingId', '終点側躯体番号')}
+        ${f('endBearing', '終点側支承種類')}
+        ${f('endExpansion', '終点側伸縮装置')}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = blocksHtml +
+    `<button onclick="addKamibuSpan()"
+      style="background:#1e3a5f;color:white;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:13px">+ 径間を追加</button>`;
+}
+
+function addKamibuSpan() {
+  const b = bridges[selBridge];
+  if (!b) return;
+  const nextNum = String((b.spanInfo?.length || 0) + 1);
+  b.spanInfo.push({
+    spanNumber: nextNum, materialClass: '', structureType: '', girderCount: '',
+    spanLength: '', slabMaterial: '',
+    startBearingId: '', startBearing: '', startExpansion: '',
+    endBearingId: '',   endBearing: '',   endExpansion: ''
+  });
+  renderKamibuEditor(b);
+}
+
+function deleteKamibuSpan(i) {
+  if (!confirm(`第${i+1}径間の上部工諸元を削除しますか？`)) return;
+  bridges[selBridge].spanInfo.splice(i, 1);
+  renderKamibuEditor(bridges[selBridge]);
+}
+
+// ============================================================
+// 下部工諸元エディタ（躯体テーブル）
+// ============================================================
+function renderShimobuEditor(b) {
+  const el = document.getElementById('shimobu-editor');
+  if (!el) return;
+  if (!b.subWorks) b.subWorks = [];
+
+  const cells = (sw, i) => `
+    <tr>
+      <td><input type="text" value="${esc(sw.id||'')}" style="width:80px"
+        oninput="bridges[${selBridge}].subWorks[${i}].id=this.value"></td>
+      <td>
+        <select onchange="bridges[${selBridge}].subWorks[${i}].material=this.value" style="width:130px">
+          <option value=""></option>
+          ${['コンクリート系','鋼系','その他'].map(o =>
+            `<option value="${esc(o)}"${sw.material===o?' selected':''}>${esc(o)}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="text" value="${esc(sw.structureHeight||'')}" style="width:90px"
+        oninput="bridges[${selBridge}].subWorks[${i}].structureHeight=this.value"></td>
+      <td><input type="text" value="${esc(sw.structureType||'')}" style="width:200px"
+        oninput="bridges[${selBridge}].subWorks[${i}].structureType=this.value"></td>
+      <td><button onclick="deleteSubWork(${i})"
+        style="background:#fde8e8;border:1px solid #e0a0a0;color:#c62828;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:11px">×</button></td>
+    </tr>`;
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px">
+      <thead>
+        <tr style="background:#f0f3f7;border-bottom:1px solid #dce0e8">
+          <th style="text-align:left;padding:6px 8px">躯体番号</th>
+          <th style="text-align:left;padding:6px 8px">材料区分</th>
+          <th style="text-align:left;padding:6px 8px">構造高(m)</th>
+          <th style="text-align:left;padding:6px 8px">構造形式</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${b.subWorks.map(cells).join('') ||
+          '<tr><td colspan="5" style="color:#aaa;text-align:center;padding:14px">躯体が登録されていません</td></tr>'}
+      </tbody>
+    </table>
+    <button onclick="addSubWork()"
+      style="background:#1e3a5f;color:white;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:13px">+ 躯体を追加</button>`;
+}
+
+function addSubWork() {
+  const b = bridges[selBridge];
+  if (!b.subWorks) b.subWorks = [];
+  // A1, A2, P1... の自動採番（既存の最終番号から推定）
+  const ids = b.subWorks.map(s => s.id || '');
+  let nextId = '';
+  if (!ids.length) nextId = 'A1';
+  else if (ids.includes('A1') && !ids.includes('A2')) nextId = 'A2';
+  else {
+    const ps = ids.filter(x => /^P\d+$/.test(x));
+    nextId = ps.length ? `P${ps.length+1}` : `P1`;
+  }
+  b.subWorks.push({ id: nextId, material: 'コンクリート系', structureHeight: '', structureType: '' });
+  renderShimobuEditor(b);
+}
+
+function deleteSubWork(i) {
+  if (!confirm(`躯体 ${bridges[selBridge].subWorks[i].id||'#'+(i+1)} を削除しますか？`)) return;
+  bridges[selBridge].subWorks.splice(i, 1);
+  renderShimobuEditor(bridges[selBridge]);
+}
+
+// ============================================================
+// 補修履歴エディタ（テーブル）
+// ============================================================
+function renderRepairEditor(b) {
+  const el = document.getElementById('repair-editor');
+  if (!el) return;
+  if (!b.repairHistory) b.repairHistory = [];
+
+  const cells = (rh, i) => `
+    <tr>
+      <td><input type="text" value="${esc(rh.spanNum||'')}" style="width:55px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].spanNum=this.value"></td>
+      <td><input type="text" value="${esc(rh.year||'')}" style="width:80px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].year=this.value"></td>
+      <td><input type="text" value="${esc(rh.member||'')}" style="width:100px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].member=this.value"></td>
+      <td><input type="text" value="${esc(rh.memberNo||'')}" style="width:55px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].memberNo=this.value"></td>
+      <td><input type="text" value="${esc(rh.method||'')}" style="width:200px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].method=this.value"></td>
+      <td><input type="text" value="${esc(rh.note||'')}" style="width:140px"
+        oninput="bridges[${selBridge}].repairHistory[${i}].note=this.value"></td>
+      <td><button onclick="deleteRepairRow(${i})"
+        style="background:#fde8e8;border:1px solid #e0a0a0;color:#c62828;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:11px">×</button></td>
+    </tr>`;
+
+  el.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:10px">
+      <thead>
+        <tr style="background:#f0f3f7;border-bottom:1px solid #dce0e8">
+          <th style="text-align:left;padding:6px 8px">径間</th>
+          <th style="text-align:left;padding:6px 8px">補修改良年</th>
+          <th style="text-align:left;padding:6px 8px">部材種別</th>
+          <th style="text-align:left;padding:6px 8px">部材番号</th>
+          <th style="text-align:left;padding:6px 8px">補修・補強工法</th>
+          <th style="text-align:left;padding:6px 8px">備考</th>
+          <th style="width:40px"></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${b.repairHistory.map(cells).join('') ||
+          '<tr><td colspan="7" style="color:#aaa;text-align:center;padding:14px">補修履歴なし</td></tr>'}
+      </tbody>
+    </table>
+    <button onclick="addRepairRow()"
+      style="background:#1e3a5f;color:white;border:none;border-radius:5px;padding:7px 14px;cursor:pointer;font-size:13px">+ 履歴を追加</button>`;
+}
+
+function addRepairRow() {
+  const b = bridges[selBridge];
+  if (!b.repairHistory) b.repairHistory = [];
+  b.repairHistory.push({ spanNum:'', year:'', member:'', memberNo:'', method:'', note:'' });
+  b.hasRepair = true;
+  renderRepairEditor(b);
+}
+
+function deleteRepairRow(i) {
+  if (!confirm('この補修履歴を削除しますか？')) return;
+  bridges[selBridge].repairHistory.splice(i, 1);
+  renderRepairEditor(bridges[selBridge]);
 }
 
 function renderDamageTable(b) {
@@ -2155,6 +2466,7 @@ function fillShimobuWork(wb, b) {
     };
     setCell(0, sw.id);
     setCell(1, sw.material);
+    setCell(2, sw.structureHeight);
     setCell(3, sw.structureType);
   });
 }
