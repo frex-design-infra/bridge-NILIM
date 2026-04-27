@@ -482,6 +482,7 @@ function promptAddGyomu() {
   gyomuList.push({ id, name: name.trim(), showChanges: false });
   _accExpanded[id] = true;
   saveGyomuList();
+  saveConfig();   // Supabaseにも保存
   renderGyomuCards();
 }
 
@@ -492,6 +493,7 @@ function renameGyomu(id) {
   if (!name || !name.trim()) return;
   g.name = name.trim();
   saveGyomuList();
+  saveConfig();   // Supabaseにも保存
   renderGyomuCards();
   ['review','photos'].forEach(t => {
     if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
@@ -506,6 +508,7 @@ function deleteGyomu(id) {
   bridges   = bridges.filter(b => b.gyomuId !== id);
   delete _accExpanded[id];
   saveGyomuList();
+  saveConfig();   // Supabaseにも保存
   renderGyomuCards();
   ['review','photos'].forEach(t => refreshSidebar(t));
 }
@@ -591,6 +594,7 @@ function handleGyomuFiles(files, gyomuId) {
   const xlsFiles = Array.from(files).filter(f => f.name.match(/\.xlsx?$/i));
   if (!xlsFiles.length) return;
   let done = 0, success = 0, errors = [];
+  const newBridges = [];   // 今回インポートした橋梁を追跡
   xlsFiles.forEach(file => {
     const reader = new FileReader();
     reader.onload = ev => {
@@ -601,6 +605,7 @@ function handleGyomuFiles(files, gyomuId) {
         // インポート時の評価値を保存（業務毎の「変更赤字」比較用）
         bridge.spans.forEach(sp => sp.members.forEach(m => { m.d_orig = Object.assign({}, m.d); }));
         bridges.push(bridge);
+        newBridges.push(bridge);
         success++;
       } catch(err) {
         errors.push(file.name);
@@ -611,7 +616,15 @@ function handleGyomuFiles(files, gyomuId) {
         ['review','photos'].forEach(t => {
           if (document.getElementById('tab-'+t).classList.contains('active')) refreshSidebar(t);
         });
-        if (success > 0) showToast(`✅ ${success}橋をインポートしました`, 'success');
+        if (success > 0) {
+          showToast(`✅ ${success}橋をインポートしました`, 'success');
+          // インポート完了後にクラウドへ自動保存
+          Promise.all(newBridges.map(b => saveBridgeToSupabase(b))).then(results => {
+            const failed = results.filter(r => r.error).length;
+            if (failed === 0) showToast('☁️ クラウドに自動保存しました', 'success');
+            else showToast(`⚠️ ${failed}橋の自動保存に失敗しました`, 'error', 5000);
+          });
+        }
         errors.forEach(name => showToast(`❌ 読込エラー: ${name}`, 'error', 5000));
       }
     };
@@ -2693,6 +2706,8 @@ const SB_URL = 'https://twolywmokxggjnugzuig.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
 
 let supabaseClient = null;
+// gyomuList をSupabaseに保存する設定レコードのID（localStorageにキャッシュ）
+let _configSbId = localStorage.getItem('nilim_config_sb_id') || null;
 
 // ============================================================
 // SUPABASE 初期化
@@ -2727,20 +2742,36 @@ async function loadBridgesFromSupabase() {
     if (!res.ok) return;
     const data = await res.json();
 
-    bridges = data.map(row => {
-      const b = row.data || {};
-      b._sbId      = row.id;
-      b._approvals = [];
-      return b;
-    });
+    // config レコードを取り出して gyomuList を復元（他のrowと混在させない）
+    const configRow = data.find(r => r.management_number === '__nilim_config__');
+    if (configRow) {
+      _configSbId = configRow.id;
+      localStorage.setItem('nilim_config_sb_id', configRow.id);
+      const remoteGyomu = configRow.data?.gyomuList || [];
+      // Supabase側のリストを優先しつつ、ローカル追加分もマージ
+      remoteGyomu.forEach(g => {
+        if (!gyomuList.find(x => x.id === g.id)) gyomuList.push(g);
+      });
+      saveGyomuList();
+    }
 
-    // クラウドから読み込んだ橋梁の gyomuId に対応する業務がなければ自動補完
+    // config行を除いて橋梁データに変換
+    bridges = data
+      .filter(r => r.management_number !== '__nilim_config__')
+      .map(row => {
+        const b = row.data || {};
+        b._sbId      = row.id;
+        b._approvals = [];
+        return b;
+      });
+
+    // それでも孤立した gyomuId があれば自動補完（フォールバック）
     bridges.forEach(b => {
       if (b.gyomuId && !gyomuList.find(g => g.id === b.gyomuId)) {
         gyomuList.push({ id: b.gyomuId, name: '（クラウドから復元）', showChanges: false });
+        saveGyomuList();
       }
     });
-    saveGyomuList();
 
     renderGyomuCards();
     refreshSidebar('review');
@@ -2770,6 +2801,29 @@ function bridgePayload(bridge) {
   }));
   delete b._approvals;
   return b;
+}
+
+// gyomuList をSupabaseの設定レコードとして保存
+async function saveConfig() {
+  const payload = {
+    management_number: '__nilim_config__',
+    name: '__config__',
+    data: { type: 'config', gyomuList },
+    updated_at: new Date().toISOString()
+  };
+  if (_configSbId) payload.id = _configSbId;
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', payload })
+    });
+    const json = await res.json();
+    if (json.id) {
+      _configSbId = json.id;
+      localStorage.setItem('nilim_config_sb_id', json.id);
+    }
+  } catch(e) { console.error('saveConfig:', e); }
 }
 
 async function saveBridgeToSupabase(bridge) {
