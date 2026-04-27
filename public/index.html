@@ -1413,18 +1413,10 @@ function renderDamageTable(b) {
             ${val==='?'?`<option value="?" selected>?</option>`:''}
           </select></td>`;
       } else if (c.key === 'concPat') {
-        // ⑥ひびわれ漏水 — パターン列: concrete が a/未設定の場合はグレーアウト（要領p.14）
-        // b以上のときのみパターン番号を記録（①〜㉗ を手入力）
-        const concVal = m.d.concrete || '';
-        const needsPat = concVal && concVal !== 'a';
-        if (!needsPat) {
-          html += `<td id="concpat-td-${bi}-${si}-${mi}" class="col-na"
-            title="ひびわれ漏水がaまたは未評価のためパターン不要"></td>`;
-        } else {
-          html += `<td id="concpat-td-${bi}-${si}-${mi}" class="${cls}">
-            ${buildConcPatSelect(bi, si, mi, val||'')}
-          </td>`;
-        }
+        // ⑥ひびわれ漏水 — 評価対象（naSet未含）なら常にドロップダウン表示
+        html += `<td id="concpat-td-${bi}-${si}-${mi}" class="${cls}">
+          ${buildConcPatSelect(bi, si, mi, val||'')}
+        </td>`;
       } else if (c.key === 'antiCorCls') {
         // ⑤防食機能の劣化 — 分類セレクト（変更時 antiCor セレクトを連動更新）
         const clsOpts = [{v:'',l:'—'},{v:'1',l:'1:塗装'},{v:'2',l:'2:めっき・金属溶射'},{v:'3',l:'3:耐候性鋼材'}];
@@ -1572,24 +1564,14 @@ function toggleGyomuShowChanges(id, checked) {
 }
 
 // ⑥ひびわれ漏水 — concrete 変更時に concPat セルを連動更新（要領p.14）
-// concrete = a/未設定 → パターン列をグレーアウト・値クリア
-// concrete = b〜e    → パターン列を活性化（テキスト入力）
+// 評価対象なら常にアクティブ — gradeによるグレーアウトなし
 function updateConcPatCell(bi, si, mi) {
-  const m       = bridges[bi].spans[si].members[mi];
-  const concVal = m.d.concrete || '';
-  const needsPat = concVal && concVal !== 'a';
   const td = document.getElementById(`concpat-td-${bi}-${si}-${mi}`);
   if (!td) return;
-  if (needsPat) {
-    td.className = td.className.replace(/\bcol-na\b/g,'').trim();
-    td.title = '';
-    td.innerHTML = buildConcPatSelect(bi, si, mi, m.d.concPat || '');
-  } else {
-    m.d.concPat = null;  // 値クリア
-    td.className = (td.className + ' col-na').trim();
-    td.title = 'ひびわれ漏水がaまたは未評価のためパターン不要';
-    td.innerHTML = '';
-  }
+  const m = bridges[bi].spans[si].members[mi];
+  td.className = td.className.replace(/\bcol-na\b/g, '').trim();
+  td.title = '';
+  td.innerHTML = buildConcPatSelect(bi, si, mi, m.d.concPat || '');
 }
 
 // ⑤防食機能の劣化 — 分類別の有効評価区分（要領p.11-13）
