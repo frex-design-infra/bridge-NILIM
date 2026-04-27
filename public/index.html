@@ -1021,6 +1021,7 @@ function refreshSidebar(tab) {
 
   // ===== 写真タブ：アコーディオン =====
   const el  = document.getElementById('photos-sidebar');
+  if (!el) return;   // 要素未配置時は何もしない（旧UI互換）
   el.innerHTML = '';
   if (!bridges.length) {
     el.innerHTML = '<div style="color:#aaa;font-size:12px;text-align:center;padding:20px">橋梁データなし</div>';
@@ -1062,6 +1063,7 @@ function refreshSidebar(tab) {
 
 function refreshReviewSidebar() {
   const el = document.getElementById('review-sidebar');
+  if (!el) return;   // 要素未配置時は何もしない
   el.innerHTML = '';
 
   if (!gyomuList.length) {
@@ -1924,6 +1926,7 @@ function renderPhotoLedger() {
 // ============================================================
 function refreshExportSummary() {
   const el = document.getElementById('export-summary');
+  if (!el) return;   // 要素未配置時は何もしない
   if (!bridges.length) {
     el.innerHTML = '<div class="alert alert-warn">インポートされた橋梁データがありません。</div>';
     return;
