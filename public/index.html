@@ -947,8 +947,8 @@ function refreshReviewSidebar() {
                       <span class="rgi-cnt">${gb.length}橋</span>
                       <label onclick="event.stopPropagation()" title="インポート値から変更した評価を赤字で表示"
                         style="display:inline-flex;align-items:center;gap:3px;font-size:10px;
-                               color:${g.showChanges?'#dc2626':'#999'};white-space:nowrap;cursor:pointer;
-                               padding:1px 5px;border-radius:3px;
+                               color:#dc2626;white-space:nowrap;cursor:pointer;
+                               padding:1px 5px;border-radius:3px;font-weight:${g.showChanges?'700':'400'};
                                background:${g.showChanges?'#fff5f5':'transparent'}">
                         <input type="checkbox" ${g.showChanges?'checked':''}
                           onclick="event.stopPropagation()"
