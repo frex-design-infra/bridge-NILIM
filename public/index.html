@@ -1346,7 +1346,7 @@ function renderDamageTable(b) {
           const clsLbl  = {'1':'分類1（塗装）','2':'分類2（めっき・金属溶射）','3':'分類3（耐候性鋼材）'}[m.d.antiCorCls||''] || '';
           html += `<td class="${acCls.trim()}" title="${acInvalid ? clsLbl+'ではこの区分は対象外です' : ''}">
             <select id="anticor-${bi}-${si}-${mi}"
-              onchange="bridges[${bi}].spans[${si}].members[${mi}].d.antiCor=this.value||null;colorCell(this)">
+              onchange="bridges[${bi}].spans[${si}].members[${mi}].d.antiCor=this.value||null;colorCell(this,${bi},${si},${mi},'antiCor')">
               <option value="">-</option>
               ${acopts.map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
               ${acInvalid?`<option value="${val}" selected style="color:red">${val}(!)</option>`:''}
@@ -1357,7 +1357,7 @@ function renderDamageTable(b) {
           // ⑥ひびわれ漏水の場合: 変更時に concPat セルを連動更新
           const extraFn = c.key === 'concrete' ? `;updateConcPatCell(${bi},${si},${mi})` : '';
           html += `<td class="${cls}">
-            <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)${extraFn}">
+            <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this,${bi},${si},${mi},'${c.key}')${extraFn}">
               <option value="">-</option>
               ${['a','b','c','d','e'].map(v=>`<option value="${v}"${val===v?' selected':''}>${v}</option>`).join('')}
               ${val==='?'?`<option value="?" selected>?</option>`:''}
@@ -1369,7 +1369,7 @@ function renderDamageTable(b) {
         const hasInvalid = val && val !== 'a' && val !== 'e' && val !== '?';
         const aeCls = cls + (hasInvalid ? ' col-new-warn' : '');
         html += `<td class="${aeCls}" title="${hasInvalid ? '要領上はa/eのみ。値を確認してください。' : ''}">
-          <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this)">
+          <select onchange="bridges[${bi}].spans[${si}].members[${mi}].d['${c.key}']=this.value||null;colorCell(this,${bi},${si},${mi},'${c.key}')">
             <option value="">-</option>
             <option value="a"${val==='a'?' selected':''}>a</option>
             <option value="e"${val==='e'?' selected':''}>e</option>
@@ -1444,11 +1444,26 @@ function updateSpanTabs(b) {
   ).join('');
 }
 
-function colorCell(sel) {
+function colorCell(sel, bi, si, mi, key) {
   const td = sel.closest('td');
   td.className = td.className.replace(/\bval-[abcde]\b/g,'');
   const vmap = {a:'val-a',b:'val-b',c:'val-c',d:'val-d',e:'val-e'};
   if (vmap[sel.value]) td.classList.add(vmap[sel.value]);
+
+  // 変更赤字チェック：d_orig と比較してクラスを動的に付け外し
+  if (bi !== undefined && key) {
+    const b = bridges[bi];
+    const showChanges = gyomuList.find(x => x.id === b?.gyomuId)?.showChanges ?? false;
+    const dOrig = b?.spans?.[si]?.members?.[mi]?.d_orig;
+    if (showChanges && dOrig != null) {
+      const origVal = dOrig[key] ?? null;
+      const newVal  = sel.value || null;
+      if (newVal !== origVal) { td.classList.add('val-changed'); }
+      else                    { td.classList.remove('val-changed'); }
+    } else {
+      td.classList.remove('val-changed');
+    }
+  }
 }
 
 // ⑬補修・補強材の損傷チェックボックス切り替え → テーブル再描画
