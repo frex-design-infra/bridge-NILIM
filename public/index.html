@@ -1664,7 +1664,7 @@ function getConcPatOpts(memberType, superMat) {
 function buildConcPatSelect(bi, si, mi, val) {
   const b = bridges[bi];
   const m = b.spans[si].members[mi];
-  const superMat = getSuperMatType(b.superType || '');
+  const superMat = getSuperMaterial(b.superStructure || '');
   const opts = getConcPatOpts(m.type || '', superMat);
   const found = opts.find(([v]) => v === val);
   const optsHtml = opts.map(([v, t]) =>
@@ -1684,7 +1684,7 @@ function updateConcPatTitle(bi, si, mi) {
   if (!sel) return;
   const b = bridges[bi];
   const m = b.spans[si].members[mi];
-  const superMat = getSuperMatType(b.superType || '');
+  const superMat = getSuperMaterial(b.superStructure || '');
   const opts = getConcPatOpts(m.type || '', superMat);
   const found = opts.find(([v]) => v === sel.value);
   sel.title = found ? found[1] : '';
