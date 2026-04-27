@@ -2006,6 +2006,7 @@ function buildFromTemplate(bridge) {
   fillShogen2(wb, bridge);
   fillKamibuWork(wb, bridge);
   fillShimobuWork(wb, bridge);
+  fillRepair(wb, bridge);
   fillSpans(wb, bridge);
 
   return wb;
@@ -2025,10 +2026,17 @@ function deepCloneSheet(ws) {
 
 // ラベル検索してデータセルを上書き
 function setByLabel(ws, label, value) {
+  return setByLabelInRange(ws, label, value, 0, 9999);
+}
+
+// 行範囲を限定したラベル検索＋上書き（多径間対応用）
+function setByLabelInRange(ws, label, value, startRow, endRow) {
   if (!ws || value === null || value === undefined || value === '') return false;
   const ref   = ws['!ref'] || 'A1:AH60';
   const range = XLSX.utils.decode_range(ref);
-  for (let r = range.s.r; r <= range.e.r; r++) {
+  const sr = Math.max(startRow, range.s.r);
+  const er = Math.min(endRow, range.e.r);
+  for (let r = sr; r <= er; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
       const cell = ws[XLSX.utils.encode_cell({r,c})];
       if (!cell || cell.v === null || cell.v === undefined) continue;
@@ -2064,37 +2072,71 @@ function fillShogen(wb, b) {
   setByLabel(ws, '下部構造形式',  b.subStructure);
   setByLabel(ws, '基礎形式',      b.foundationType);
   setByLabel(ws, '点検日',        b.inspectionDate);
+  setByLabel(ws, '海岸からの距離', b.coastalDistance);
+  setByLabel(ws, '緊急輸送路の指定', b.emergencyRoute);
+  setByLabel(ws, '迂回路の有無',  b.detourRoute);
+  setByLabel(ws, '路下条件',      b.underCondition);
 }
 
 function fillShogen2(wb, b) {
   const ws = wb.Sheets['橋梁諸元2']; if (!ws) return;
-  setByLabel(ws, '橋梁管理番号', b.managementNumber);
-  setByLabel(ws, '橋梁名称',     b.name);
-  setByLabel(ws, '路線名',       b.routeName);
-  setByLabel(ws, '所在地',       b.locationDetail || b.locationFrom);
+  setByLabel(ws, '橋梁管理番号',     b.managementNumber);
+  setByLabel(ws, '橋梁名称',         b.name);
+  setByLabel(ws, '路線名',           b.routeName);
+  setByLabel(ws, '所在地',           b.locationDetail || b.locationFrom);
+  setByLabel(ws, '県名',             b.prefName);
+  setByLabel(ws, '地方公共団体名',    b.municipalityName);
+  setByLabel(ws, '事務所名',         b.officeName);
+  setByLabel(ws, '橋梁番号',         b.bridgeNumber);
+  setByLabel(ws, '路線コード',       b.routeCode);
+  setByLabel(ws, '道路種別',         b.roadType);
+  setByLabel(ws, '橋梁種別',         b.bridgeType);
+  setByLabel(ws, '緯度',             b.latitude);
+  setByLabel(ws, '経度',             b.longitude);
+  setByLabel(ws, '塩害地域',         b.salinityClass);
+  setByLabel(ws, '海岸からの距離',    b.coastalDistance);
+  setByLabel(ws, '架橋条件',         b.underCondition);
+  setByLabel(ws, '緊急輸送路の指定',  b.emergencyRoute);
   const bl = parseFloat(b.bridgeLength);
   if (!isNaN(bl)) setByLabel(ws, '橋長', bl);
   const sc = parseInt(b.totalSpans);
   if (!isNaN(sc)) setByLabel(ws, '径間数', sc);
 }
 
+// 上部工諸元（多径間対応）：テンプレ内の「径間番号」ラベル行を全部見つけて、
+// b.spanInfo[i] を i番目のブロックに書き込む
 function fillKamibuWork(wb, b) {
   const ws = wb.Sheets['上部工諸元']; if (!ws || !b.spanInfo.length) return;
-  const si = b.spanInfo[0];
-  setByLabel(ws, '材料区分',   si.materialClass);
-  setByLabel(ws, '構造形式',   si.structureType);
-  setByLabel(ws, '桁本数',     si.girderCount);
-  const sl = parseFloat(si.spanLength);
-  if (!isNaN(sl)) setByLabel(ws, '支間長', sl);
-  setByLabel(ws, '起点側支承種類',    si.startBearing);
-  setByLabel(ws, '終点側支承種類',    si.endBearing);
-  setByLabel(ws, '起点側伸縮装置種類', si.startExpansion);
-  setByLabel(ws, '終点側伸縮装置種類', si.endExpansion);
+
+  const d = s2a(ws);
+  const blockRows = [];
+  for (let r = 0; r < d.length; r++) {
+    if (d[r] && String(d[r][0]||'').trim() === '径間番号') blockRows.push(r);
+  }
+  if (!blockRows.length) return;
+
+  b.spanInfo.forEach((si, i) => {
+    if (i >= blockRows.length) return;  // テンプレに無い径間は捨てる
+    const startRow = blockRows[i];
+    const endRow   = (i + 1 < blockRows.length) ? blockRows[i+1] - 1 : startRow + 14;
+
+    setByLabelInRange(ws, '材料区分',          si.materialClass,  startRow, endRow);
+    setByLabelInRange(ws, '構造形式',          si.structureType,  startRow, endRow);
+    setByLabelInRange(ws, '桁本数',            si.girderCount,    startRow, endRow);
+    const sl = parseFloat(si.spanLength);
+    if (!isNaN(sl)) setByLabelInRange(ws, '支間長', sl, startRow, endRow);
+    setByLabelInRange(ws, '床版材料',          si.slabMaterial,   startRow, endRow);
+    setByLabelInRange(ws, '起点側躯体番号',    si.startBearingId, startRow, endRow);
+    setByLabelInRange(ws, '終点側躯体番号',    si.endBearingId,   startRow, endRow);
+    setByLabelInRange(ws, '起点側支承種類',    si.startBearing,   startRow, endRow);
+    setByLabelInRange(ws, '終点側支承種類',    si.endBearing,     startRow, endRow);
+    setByLabelInRange(ws, '起点側伸縮装置種類', si.startExpansion, startRow, endRow);
+    setByLabelInRange(ws, '終点側伸縮装置種類', si.endExpansion,   startRow, endRow);
+  });
 }
 
 function fillShimobuWork(wb, b) {
-  const ws = wb.Sheets['下部工諸元']; if (!ws) return;
-  // 既存行を更新
+  const ws = wb.Sheets['下部工諸元']; if (!ws || !b.subWorks) return;
   const d = s2a(ws);
   let hdrRow = -1;
   for (let r = 0; r < d.length; r++) {
@@ -2103,10 +2145,55 @@ function fillShimobuWork(wb, b) {
   if (hdrRow < 0) return;
   b.subWorks.forEach((sw, i) => {
     const r   = hdrRow + 1 + i;
-    const a3  = XLSX.utils.encode_cell({r, c: 3});
-    const tc  = ws[a3];
-    if (tc) { tc.v = sw.structureType; tc.t = 's'; }
+    // 列: A=躯体番号, B=材料区分, C=構造高, D=構造形式
+    const setCell = (col, val, type='s') => {
+      if (val === null || val === undefined || val === '') return;
+      const a = XLSX.utils.encode_cell({r, c: col});
+      const tc = ws[a];
+      if (tc) { tc.v = val; tc.t = type; }
+      else ws[a] = { v: val, t: type };
+    };
+    setCell(0, sw.id);
+    setCell(1, sw.material);
+    setCell(3, sw.structureType);
   });
+}
+
+// 補修履歴シート：repairHistory[] を全行書き込み
+function fillRepair(wb, b) {
+  const ws = wb.Sheets['補修履歴'];
+  if (!ws || !b.repairHistory || !b.repairHistory.length) return;
+
+  // ヘッダー行検出（径間番号 / 補修改良年 / 部材種別名称 / 部材番号 / 補修・補強工法名称 / 備考）
+  const d = s2a(ws);
+  let hdrRow = -1;
+  for (let r = 0; r < d.length; r++) {
+    if (d[r] && String(d[r][0]||'').includes('径間') && String(d[r][1]||'').includes('補修')) {
+      hdrRow = r; break;
+    }
+  }
+  if (hdrRow < 0) return;
+
+  // 各履歴行を書き込み
+  b.repairHistory.forEach((rh, i) => {
+    const r = hdrRow + 1 + i;
+    const cells = [rh.spanNum, rh.year, rh.member, rh.memberNo, rh.method, rh.note];
+    cells.forEach((val, ci) => {
+      if (val === null || val === undefined || val === '') return;
+      const a = XLSX.utils.encode_cell({r, c: ci});
+      ws[a] = { v: String(val), t: 's' };
+    });
+  });
+
+  // !ref を更新（書き込み行が範囲外なら拡張）
+  const ref = ws['!ref'] || 'A1:F10';
+  const range = XLSX.utils.decode_range(ref);
+  const lastR = hdrRow + b.repairHistory.length;
+  if (lastR > range.e.r) {
+    range.e.r = lastR;
+    if (range.e.c < 5) range.e.c = 5;
+    ws['!ref'] = XLSX.utils.encode_range(range);
+  }
 }
 
 // 損傷評価シートへの書き込み
