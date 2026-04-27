@@ -1,7 +1,10 @@
 const { createClient } = require('@supabase/supabase-js');
 
 const SB_URL = 'https://twolywmokxggjnugzuig.supabase.co';
-const SB_KEY = process.env.SUPABASE_SERVICE_KEY;
+// service_role キーが Vercel 環境変数に設定されていればそちらを優先、なければ anon キーを使用
+// （anon キーはフロントエンドの HTML にも記載済みで公開情報）
+const SB_KEY = process.env.SUPABASE_SERVICE_KEY
+  || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3b2x5d21va3hnZ2pudWd6dWlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU1NDQ0MzksImV4cCI6MjA5MTEyMDQzOX0.fviTO35D3s3Rqz3VtTVcXdlgESjiO9yz4PRvsxGHVCI';
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -10,11 +13,6 @@ module.exports = async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
-
-  // 環境変数チェック
-  if (!SB_KEY) {
-    return res.status(500).json({ error: 'SUPABASE_SERVICE_KEY が未設定です' });
-  }
 
   const supabase = createClient(SB_URL, SB_KEY);
 
