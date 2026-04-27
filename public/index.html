@@ -849,7 +849,7 @@ function parseSpan(data, spanNum) {
 
 // 旧12列 → 統一キー
 function mapOld(row) {
-  const v    = x => { const s = String(x??'').trim(); return s===''||s==='無'||s==='―' ? null : s; };
+  const v    = x => { const s = String(x??'').trim(); return s===''||s==='―' ? null : s==='無' ? 'a' : s; };
   // a,eのみの2値評価: 有→e / 無→a で確定（⑦鉄筋露出 ⑧抜け落ち ⑩PC定着部 ⑪路面凹凸 ⑫支承機能障害）
   const yn = x => { const s = String(x??'').trim(); return s==='無'?'a': s==='有'?'e': v(x); };
   return {
@@ -869,7 +869,7 @@ function mapOld(row) {
 
 // 新テンプレ17列 → 統一キー
 function mapNew(row) {
-  const v = x => { const s = String(x??'').trim(); return s===''||s==='―' ? null : s; };
+  const v = x => { const s = String(x??'').trim(); return s===''||s==='―' ? null : s==='無' ? 'a' : s; };
   return {
     corrosion  : v(row[2]),   crack      : v(row[3]),
     boltLoss   : v(row[4]),   fracture   : v(row[5]),
