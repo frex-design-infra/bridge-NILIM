@@ -724,6 +724,7 @@ function createEmptyBridge(gyomuId) {
     spans: [{ spanNumber:1, members:[], others:'', inspYear:'', structType:'' }],
     hasRepair: false,
     photos: [],
+    assets: [],
     bridgeOverviewImages: [],
     photoLedger: null
   };
@@ -762,6 +763,7 @@ function handleGyomuFiles(files, gyomuId) {
         const bridge = parseOldExcel(wb, file.name);
         await attachBridgeOverviewImages(bridge, wb, arrayBuffer);
         await attachExcelPhotoLedger(bridge, wb, arrayBuffer);
+        refreshBridgeAssets(bridge);
         bridge.gyomuId = gyomuId;
         // インポート時の評価値を保存（業務毎の「変更赤字」比較用）
         bridge.spans.forEach(sp => sp.members.forEach(m => { m.d_orig = Object.assign({}, m.d); }));
@@ -824,8 +826,11 @@ function parseOldExcel(wb, filename) {
     hasRepair: false,
     // 写真
     photos: [],
+    // 共通画像アセット台帳（Drive保存・エクスポート用の中継構造）
+    assets: [],
     // 橋梁諸元の全体図・径間別一般図（Excel埋め込み画像）
     bridgeOverviewImages: [],
+    assets: [],
     // 現状写真台帳 / 現況写真台帳（Excel埋め込み画像）
     photoLedger: null
   };
@@ -1877,6 +1882,115 @@ function deleteRepairRow(i) {
 }
 
 // ============================================================
+// 共通画像アセット台帳（Google Drive保存・エクスポート用の中継構造）
+// ============================================================
+function makeAssetId(parts) {
+  return parts.map(v => String(v ?? '').replace(/[^a-zA-Z0-9_\-一-龥ぁ-んァ-ヶ]/g, '_')).join('__');
+}
+
+function assetFromImage(base, image) {
+  const replacement = image?.replacement || null;
+  return {
+    id: base.id,
+    category: base.category,
+    kind: base.kind || '',
+    label: base.label || image?.name || '',
+    sourceSheetName: base.sourceSheetName || '',
+    normalizedSheetName: base.normalizedSheetName || base.sourceSheetName || '',
+    sourceType: 'excel-embedded-image',
+    sourceMediaPath: image?.mediaPath || '',
+    mediaPath: image?.mediaPath || '',
+    name: image?.name || base.label || '',
+    ext: image?.ext || '',
+    contentType: image?.contentType || '',
+    dataUrl: replacement?.dataUrl || image?.dataUrl || '',
+    originalDataUrl: image?.dataUrl || '',
+    replacementDataUrl: replacement?.dataUrl || '',
+    replacementName: replacement?.name || null,
+    hasReplacement: !!replacement,
+    anchor: image?.anchor || null,
+    exportTarget: {
+      sheetName: base.exportSheetName || base.normalizedSheetName || base.sourceSheetName || '',
+      anchor: image?.anchor || null
+    },
+    drive: {
+      fileId: image?.driveFileId || null,
+      previewFileId: image?.drivePreviewFileId || null,
+      folderId: image?.driveFolderId || null,
+      path: image?.drivePath || null
+    },
+    meta: base.meta || {}
+  };
+}
+
+function refreshBridgeAssets(bridge) {
+  if (!bridge) return [];
+  const assets = [];
+
+  (bridge.bridgeOverviewImages || []).forEach((img, i) => {
+    assets.push(assetFromImage({
+      id: makeAssetId(['asset', 'bridge-overview', img.kind || 'image', img.index || i + 1]),
+      category: 'bridge-overview',
+      kind: img.kind || '',
+      label: img.label || (img.kind === 'general' ? '径間別一般図' : '全体図'),
+      sourceSheetName: '橋梁諸元',
+      normalizedSheetName: '橋梁諸元',
+      exportSheetName: '橋梁諸元',
+      meta: { index: img.index || i + 1 }
+    }, img));
+  });
+
+  const ledger = bridge.photoLedger;
+  (ledger?.images || []).forEach((img, i) => {
+    const block = (ledger.blocks || []).find(b => b.imageIndex === i);
+    const fields = block?.fields || {};
+    assets.push(assetFromImage({
+      id: makeAssetId(['asset', 'photo-ledger', i + 1]),
+      category: 'photo-ledger',
+      kind: 'photo',
+      label: fields.photoNumber ? `現況写真 ${fields.photoNumber}` : `現況写真 ${i + 1}`,
+      sourceSheetName: ledger.sourceSheetName || '現況写真台帳',
+      normalizedSheetName: ledger.normalizedSheetName || '現況写真台帳',
+      exportSheetName: '現況写真台帳',
+      meta: {
+        imageIndex: i,
+        blockIndex: block?.index || null,
+        photoNumber: fields.photoNumber || '',
+        spanNumber: fields.spanNumber || '',
+        description: fields.description || '',
+        memo: fields.memo || ''
+      }
+    }, img));
+  });
+
+  bridge.assets = assets;
+  return assets;
+}
+
+function assetPayload(asset) {
+  return {
+    id: asset.id,
+    category: asset.category,
+    kind: asset.kind,
+    label: asset.label,
+    sourceSheetName: asset.sourceSheetName,
+    normalizedSheetName: asset.normalizedSheetName,
+    sourceType: asset.sourceType,
+    sourceMediaPath: asset.sourceMediaPath,
+    mediaPath: asset.mediaPath,
+    name: asset.name,
+    ext: asset.ext,
+    contentType: asset.contentType,
+    anchor: asset.anchor,
+    exportTarget: asset.exportTarget,
+    drive: asset.drive,
+    hasReplacement: !!asset.hasReplacement,
+    replacementName: asset.replacementName || null,
+    meta: asset.meta || {}
+  };
+}
+
+// ============================================================
 // 橋梁諸元 画像（全体図・径間別一般図）の抽出・確認表示
 // ============================================================
 async function attachBridgeOverviewImages(bridge, wb, arrayBuffer) {
@@ -1886,6 +2000,7 @@ async function attachBridgeOverviewImages(bridge, wb, arrayBuffer) {
   try {
     const images = await extractSheetImagesFromXlsx(arrayBuffer, sourceSheetName);
     bridge.bridgeOverviewImages = classifyBridgeOverviewImages(images);
+    refreshBridgeAssets(bridge);
   } catch (e) {
     console.warn('[bridgeOverviewImages] extract failed:', e);
     bridge.bridgeOverviewImages = [];
@@ -2029,6 +2144,7 @@ async function attachExcelPhotoLedger(bridge, wb, arrayBuffer) {
     bridge.photoLedger.extractError = e.message || String(e);
   }
   rebuildPhotoLedgerBlocks(bridge.photoLedger);
+  refreshBridgeAssets(bridge);
 }
 
 function findWorkbookSheetName(wb, candidates) {
@@ -2449,6 +2565,7 @@ async function replacePhotoLedgerImage(i, file) {
     img.replacement = resized;
     img.replaced = true;
     rebuildPhotoLedgerBlocks(ledger);
+    refreshBridgeAssets(bridges[selBridge]);
     renderPhotoLedgerEditor(bridges[selBridge]);
     showToast(`📷 ${img.name} を差し替えました`, 'success');
   } catch (e) {
@@ -4114,9 +4231,11 @@ async function loadAllApprovals() {
 function bridgePayload(bridge) {
   // File オブジェクトはJSONに入れられないので写真URLは除外
   const b = {...bridge};
+  refreshBridgeAssets(b);
   b.photos = (b.photos || []).map(p => ({
     name: p.name, cam: p.cam, pNo: p.pNo
   }));
+  b.assets = (b.assets || []).map(assetPayload);
   if (b.bridgeOverviewImages) {
     b.bridgeOverviewImages = (b.bridgeOverviewImages || []).map(img => ({
       id: img.id, kind: img.kind, label: img.label, index: img.index, name: img.name,
