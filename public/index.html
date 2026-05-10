@@ -577,27 +577,58 @@ function renameGyomu(id) {
   });
 }
 
-function deleteGyomu(id) {
+async function deleteGyomu(id) {
   const g = gyomuList.find(x => x.id === id);
-  const count = bridges.filter(b => b.gyomuId === id).length;
-  if (!confirm(`「${g?.name}」を削除しますか？\n（読込済み橋梁データ ${count} 件も削除されます）`)) return;
+  const targets = bridges.filter(b => b.gyomuId === id);
+  const count = targets.length;
+  if (!confirm(`「${g?.name}」を削除しますか？\n（読込済み橋梁データ ${count} 件もクラウドから削除されます）`)) return;
+
+  const failed = [];
+  for (const b of targets) {
+    const res = await deleteBridgeFromSupabase(b);
+    if (res.error) failed.push(`${b.name || '(名称不明)'}: ${res.error}`);
+  }
+  if (failed.length) {
+    showToast(`❌ クラウド削除に失敗: ${failed.length}件`, 'error', 6000);
+    console.error('[deleteGyomu] failed:', failed);
+    return;
+  }
+
   gyomuList = gyomuList.filter(x => x.id !== id);
   bridges   = bridges.filter(b => b.gyomuId !== id);
+  if (selBridge >= 0 && !bridges[selBridge]) selBridge = -1;
   delete _accExpanded[id];
   saveGyomuList();
-  saveConfig();   // Supabaseにも保存
+  await saveConfig();   // Supabaseにも保存
   renderGyomuCards();
   ['review','photos'].forEach(t => refreshSidebar(t));
+  refreshExportSummary();
+  showToast(`🗑️ 「${g?.name || '業務'}」を削除しました`, 'success');
 }
 
-function deleteBridge(bi) {
+async function deleteBridge(bi) {
   const b = bridges[bi];
-  if (!confirm(`「${b?.name||'(名称不明)'}」を削除しますか？`)) return;
+  if (!b) return;
+  if (!confirm(`「${b?.name||'(名称不明)'}」を削除しますか？\nクラウド保存済みの場合はクラウド側からも削除します。`)) return;
+
+  const res = await deleteBridgeFromSupabase(b);
+  if (res.error) {
+    showToast(`❌ クラウド削除に失敗: ${res.error}`, 'error', 6000);
+    return;
+  }
+
   bridges.splice(bi, 1);
-  if (selBridge === bi) { selBridge = -1; }
-  else if (selBridge > bi) { selBridge--; }
+  if (selBridge === bi) {
+    selBridge = -1;
+    const rp = document.getElementById('review-placeholder');
+    const rc = document.getElementById('review-content');
+    if (rp) rp.style.display = 'block';
+    if (rc) rc.style.display = 'none';
+  } else if (selBridge > bi) { selBridge--; }
   renderGyomuCards();
   ['review','photos'].forEach(t => refreshSidebar(t));
+  refreshExportSummary();
+  showToast(`🗑️ 「${b.name || '橋梁'}」を削除しました`, 'success');
 }
 
 function renderGyomuCards() {
@@ -4136,10 +4167,39 @@ async function saveConfig() {
   } catch(e) { console.error('saveConfig:', e); }
 }
 
+function bridgeLocalStorageKey(bridge) {
+  return `nilim_bid_${bridge?.managementNumber || ''}__${bridge?.name || ''}`;
+}
+
+async function deleteBridgeFromSupabase(bridge) {
+  if (!bridge) return { error: '橋梁データがありません' };
+  if (!bridge._sbId) {
+    const cached = localStorage.getItem(bridgeLocalStorageKey(bridge));
+    if (cached) bridge._sbId = cached;
+  }
+  if (!bridge._sbId) return { error: null, skipped: true };
+
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', payload: { id: bridge._sbId } })
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) return { error: json.error || res.statusText };
+    localStorage.removeItem(bridgeLocalStorageKey(bridge));
+    delete bridge._sbId;
+    delete bridge._approvals;
+    return { error: null };
+  } catch(e) {
+    return { error: e.message || String(e) };
+  }
+}
+
 async function saveBridgeToSupabase(bridge) {
   // _sbId がメモリにない場合、localStorageキャッシュから復元（新タブ・リロード後の重複INSERT防止）
   if (!bridge._sbId) {
-    const lsKey = `nilim_bid_${bridge.managementNumber || ''}__${bridge.name || ''}`;
+    const lsKey = bridgeLocalStorageKey(bridge);
     const cached = localStorage.getItem(lsKey);
     if (cached) bridge._sbId = cached;
   }
@@ -4162,7 +4222,7 @@ async function saveBridgeToSupabase(bridge) {
     if (!res.ok) return { id: null, error: json.error || res.statusText };
     bridge._sbId = json.id;
     // IDをlocalStorageにキャッシュ
-    const lsKey = `nilim_bid_${bridge.managementNumber || ''}__${bridge.name || ''}`;
+    const lsKey = bridgeLocalStorageKey(bridge);
     localStorage.setItem(lsKey, json.id);
     return { id: json.id, error: null };
   } catch(e) {

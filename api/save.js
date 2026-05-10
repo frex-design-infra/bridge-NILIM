@@ -48,6 +48,25 @@ module.exports = async function handler(req, res) {
       return res.json(data);
     }
 
+    if (action === 'delete') {
+      const { id } = payload || {};
+      if (!id) return res.status(400).json({ error: 'delete requires payload.id' });
+
+      // approvals が bridge_id を参照している場合に備えて、先に関連是認を削除する。
+      const { error: approvalError } = await supabase
+        .from('approvals')
+        .delete()
+        .eq('bridge_id', id);
+      if (approvalError) throw approvalError;
+
+      const { error } = await supabase
+        .from('bridges')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return res.json({ id, deleted: true });
+    }
+
     return res.status(400).json({ error: `unknown action: ${action}` });
   } catch (e) {
     console.error('[api/save]', e);
