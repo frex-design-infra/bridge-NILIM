@@ -116,6 +116,21 @@ td.notes-col input { text-align: left; }
 .thumb.assigned { border-color: #2e7d32; }
 .thumb.unassigned { border-color: #ff9800; }
 
+/* 現況写真台帳（Excel埋め込み画像） */
+.photo-ledger-summary { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; font-size:12px; color:#555; }
+.photo-ledger-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; margin:12px 0 18px; }
+.photo-ledger-thumb { border:1px solid #dce0e8; border-radius:8px; overflow:hidden; background:#fafbfc; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+.photo-ledger-thumb.replaced { border-color:#2e7d32; background:#f0fbf4; }
+.photo-ledger-thumb img { width:100%; aspect-ratio:4/3; object-fit:contain; background:#f5f6fa; display:block; }
+.photo-ledger-thumb .plt-meta { padding:8px; font-size:11px; color:#666; line-height:1.5; }
+.photo-ledger-thumb .plt-title { font-weight:700; color:#1e3a5f; margin-bottom:4px; }
+.photo-ledger-thumb .drop-replace { margin-top:7px; border:1px dashed #b8c2d2; border-radius:6px; padding:8px; text-align:center; cursor:pointer; color:#777; background:white; }
+.photo-ledger-thumb .drop-replace:hover, .photo-ledger-thumb .drop-replace.dragover { background:#eef7fd; border-color:#5dade2; color:#1e3a5f; }
+.photo-ledger-cells { max-height:420px; overflow:auto; border:1px solid #dce0e8; border-radius:6px; }
+.photo-ledger-cells table { min-width:900px; }
+.photo-ledger-cells th { position:sticky; top:0; z-index:1; }
+.photo-ledger-cells input { min-width:90px; text-align:left; padding:3px 5px; }
+
 /* アラート */
 .alert { padding: 9px 13px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; line-height: 1.5; }
 .alert-info { background: #e3f2fd; color: #1565c0; border-left: 3px solid #1565c0; }
@@ -308,6 +323,7 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
           <div class="rev-subtab"        data-tab="kamibu"  onclick="selectReviewSubtab('kamibu')">🌉 上部工</div>
           <div class="rev-subtab"        data-tab="shimobu" onclick="selectReviewSubtab('shimobu')">🏛️ 下部工</div>
           <div class="rev-subtab"        data-tab="repair"  onclick="selectReviewSubtab('repair')">🔧 補修履歴</div>
+          <div class="rev-subtab"        data-tab="photoledger" onclick="selectReviewSubtab('photoledger')">📷 現況写真台帳</div>
           <div class="rev-subtab"        data-tab="damage"  onclick="selectReviewSubtab('damage')">⚠️ 損傷評価</div>
         </div>
 
@@ -330,6 +346,10 @@ td.val-changed select, td.val-changed input { color: #dc2626; font-weight: 700; 
         <div class="card rev-pane" id="card-repair" data-pane="repair" style="display:none">
           <h2>補修履歴</h2>
           <div id="repair-editor"></div>
+        </div>
+        <div class="card rev-pane" id="card-photoledger" data-pane="photoledger" style="display:none">
+          <h2>現況写真台帳 <span class="badge badge-info" style="font-size:10px">Excel埋め込み画像</span></h2>
+          <div id="photoledger-editor"></div>
         </div>
         <div class="card rev-pane" id="card-damage" data-pane="damage" style="display:none">
           <h2>損傷程度の評価 <span class="badge badge-info" style="font-size:10px">様式2</span>
@@ -646,7 +666,8 @@ function createEmptyBridge(gyomuId) {
     repairHistory: [],
     spans: [{ spanNumber:1, members:[], others:'', inspYear:'', structType:'' }],
     hasRepair: false,
-    photos: []
+    photos: [],
+    photoLedger: null
   };
   bridges.push(b);
   renderGyomuCards();
@@ -676,10 +697,12 @@ function handleGyomuFiles(files, gyomuId) {
   const newBridges = [];   // 今回インポートした橋梁を追跡
   xlsFiles.forEach(file => {
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       try {
-        const wb     = XLSX.read(ev.target.result, { type: 'array', cellDates: true });
+        const arrayBuffer = ev.target.result;
+        const wb     = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
         const bridge = parseOldExcel(wb, file.name);
+        await attachExcelPhotoLedger(bridge, wb, arrayBuffer);
         bridge.gyomuId = gyomuId;
         // インポート時の評価値を保存（業務毎の「変更赤字」比較用）
         bridge.spans.forEach(sp => sp.members.forEach(m => { m.d_orig = Object.assign({}, m.d); }));
@@ -741,7 +764,9 @@ function parseOldExcel(wb, filename) {
     // 補修補強材の損傷チェック（デフォルト false = グレーアウト）
     hasRepair: false,
     // 写真
-    photos: []
+    photos: [],
+    // 現状写真台帳 / 現況写真台帳（Excel埋め込み画像）
+    photoLedger: null
   };
 
   // --- 橋梁諸元 ---
@@ -1523,6 +1548,7 @@ function renderReview(b) {
   renderKamibuEditor(b);
   renderShimobuEditor(b);
   renderRepairEditor(b);
+  renderPhotoLedgerEditor(b);
 
   // ---- 径間タブ ----
   const spanTabsEl = document.getElementById('span-tabs');
@@ -1786,6 +1812,286 @@ function deleteRepairRow(i) {
   if (!confirm('この補修履歴を削除しますか？')) return;
   bridges[selBridge].repairHistory.splice(i, 1);
   renderRepairEditor(bridges[selBridge]);
+}
+
+// ============================================================
+// 現況写真台帳（現状写真台帳/現況写真台帳の正規化・画像抽出・差し替え）
+// ============================================================
+const PHOTO_LEDGER_SHEET_CANDIDATES = ['現況写真台帳', '現状写真台帳'];
+
+async function attachExcelPhotoLedger(bridge, wb, arrayBuffer) {
+  const sourceSheetName = PHOTO_LEDGER_SHEET_CANDIDATES.find(sn => wb.Sheets[sn]);
+  if (!sourceSheetName) {
+    bridge.photoLedger = null;
+    return;
+  }
+
+  const ws = wb.Sheets[sourceSheetName];
+  const cells = s2a(ws).map(row => (row || []).map(v => v == null ? '' : String(v)));
+  bridge.photoLedger = {
+    sourceSheetName,
+    normalizedSheetName: '現況写真台帳',
+    cells,
+    images: [],
+    note: '出力時は「現況写真台帳」シートとして template.xlsx に載せる予定'
+  };
+
+  try {
+    bridge.photoLedger.images = await extractSheetImagesFromXlsx(arrayBuffer, sourceSheetName);
+  } catch (e) {
+    console.warn('[photoLedger] image extract failed:', e);
+    bridge.photoLedger.extractError = e.message || String(e);
+  }
+}
+
+async function extractSheetImagesFromXlsx(arrayBuffer, sheetName) {
+  if (typeof JSZip === 'undefined') return [];
+  const zip = await JSZip.loadAsync(arrayBuffer);
+  const parser = new DOMParser();
+  const getXml = async path => {
+    const f = zip.file(path);
+    return f ? parser.parseFromString(await f.async('text'), 'application/xml') : null;
+  };
+  const relTargetToPath = (baseDir, target) => {
+    if (!target) return '';
+    if (target.startsWith('/')) return target.slice(1);
+    const parts = (baseDir + '/' + target).split('/');
+    const out = [];
+    parts.forEach(part => {
+      if (!part || part === '.') return;
+      if (part === '..') out.pop();
+      else out.push(part);
+    });
+    return out.join('/');
+  };
+
+  const workbookXml = await getXml('xl/workbook.xml');
+  const workbookRels = await getXml('xl/_rels/workbook.xml.rels');
+  if (!workbookXml || !workbookRels) return [];
+
+  const sheets = Array.from(workbookXml.getElementsByTagName('sheet'));
+  const sheetNode = sheets.find(n => n.getAttribute('name') === sheetName);
+  if (!sheetNode) return [];
+  const rid = sheetNode.getAttribute('r:id') || sheetNode.getAttribute('id');
+  if (!rid) return [];
+
+  const wbRel = Array.from(workbookRels.getElementsByTagName('Relationship'))
+    .find(r => r.getAttribute('Id') === rid);
+  if (!wbRel) return [];
+  const sheetPath = relTargetToPath('xl', wbRel.getAttribute('Target') || '');
+  const sheetDir = sheetPath.split('/').slice(0, -1).join('/');
+  const sheetBase = sheetPath.split('/').pop();
+  const sheetRelsPath = `${sheetDir}/_rels/${sheetBase}.rels`;
+  const sheetRels = await getXml(sheetRelsPath);
+  const sheetXml = await getXml(sheetPath);
+  if (!sheetRels || !sheetXml) return [];
+
+  const drawingNode = Array.from(sheetXml.getElementsByTagName('drawing'))[0];
+  if (!drawingNode) return [];
+  const drawingRid = drawingNode.getAttribute('r:id') || drawingNode.getAttribute('id');
+  const drawingRel = Array.from(sheetRels.getElementsByTagName('Relationship'))
+    .find(r => r.getAttribute('Id') === drawingRid);
+  if (!drawingRel) return [];
+
+  const drawingPath = relTargetToPath(sheetDir, drawingRel.getAttribute('Target') || '');
+  const drawingDir = drawingPath.split('/').slice(0, -1).join('/');
+  const drawingBase = drawingPath.split('/').pop();
+  const drawingXml = await getXml(drawingPath);
+  const drawingRels = await getXml(`${drawingDir}/_rels/${drawingBase}.rels`);
+  if (!drawingXml || !drawingRels) return [];
+
+  const rels = Array.from(drawingRels.getElementsByTagName('Relationship'));
+  const anchors = [
+    ...Array.from(drawingXml.getElementsByTagName('xdr:twoCellAnchor')),
+    ...Array.from(drawingXml.getElementsByTagName('twoCellAnchor')),
+    ...Array.from(drawingXml.getElementsByTagName('xdr:oneCellAnchor')),
+    ...Array.from(drawingXml.getElementsByTagName('oneCellAnchor')),
+  ];
+
+  const readPos = (anchor, tag) => {
+    const node = Array.from(anchor.childNodes).find(n => n.nodeType === 1 && n.localName === tag);
+    if (!node) return null;
+    const read = name => {
+      const child = Array.from(node.childNodes).find(n => n.nodeType === 1 && n.localName === name);
+      return child ? Number(child.textContent || 0) : 0;
+    };
+    return { col: read('col'), colOff: read('colOff'), row: read('row'), rowOff: read('rowOff') };
+  };
+  const contentType = path => {
+    const ext = (path.split('.').pop() || '').toLowerCase();
+    return {png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', bmp:'image/bmp', webp:'image/webp'}[ext] || 'application/octet-stream';
+  };
+
+  const images = [];
+  for (let i = 0; i < anchors.length; i++) {
+    const anchor = anchors[i];
+    const blip = Array.from(anchor.getElementsByTagName('*')).find(n => n.localName === 'blip');
+    if (!blip) continue;
+    const embedRid = blip.getAttribute('r:embed') || blip.getAttribute('embed');
+    const rel = rels.find(r => r.getAttribute('Id') === embedRid);
+    if (!rel) continue;
+    const mediaPath = relTargetToPath(drawingDir, rel.getAttribute('Target') || '');
+    const f = zip.file(mediaPath);
+    if (!f) continue;
+    const bytes = await f.async('base64');
+    const mime = contentType(mediaPath);
+    const cNvPr = Array.from(anchor.getElementsByTagName('*')).find(n => n.localName === 'cNvPr');
+    const name = cNvPr?.getAttribute('name') || `画像${i + 1}`;
+    images.push({
+      id: `plimg_${Date.now()}_${i}`,
+      name,
+      mediaPath,
+      ext: mediaPath.split('.').pop() || '',
+      contentType: mime,
+      dataUrl: `data:${mime};base64,${bytes}`,
+      anchor: { from: readPos(anchor, 'from'), to: readPos(anchor, 'to') },
+      replaced: false,
+      replacement: null
+    });
+  }
+  return images;
+}
+
+function renderPhotoLedgerEditor(b) {
+  const el = document.getElementById('photoledger-editor');
+  if (!el) return;
+  const ledger = b.photoLedger;
+  if (!ledger) {
+    el.innerHTML = `<div class="alert alert-warn">
+      インポートExcelに「現況写真台帳」または「現状写真台帳」シートが見つかりませんでした。
+    </div>`;
+    return;
+  }
+
+  const imgCount = ledger.images?.length || 0;
+  const replaced = (ledger.images || []).filter(img => img.replaced).length;
+  const imageHtml = imgCount ? `
+    <div class="photo-ledger-grid">
+      ${ledger.images.map((img, i) => photoLedgerImageCard(img, i)).join('')}
+    </div>` : `<div class="alert alert-warn">
+      シートは読み込み済みですが、埋め込み画像は検出できませんでした。
+      ${ledger.extractError ? `<br>詳細: ${esc(ledger.extractError)}` : ''}
+    </div>`;
+
+  el.innerHTML = `
+    <div class="photo-ledger-summary">
+      <span class="badge badge-info">入力: ${esc(ledger.sourceSheetName)}</span>
+      <span class="badge badge-ok">内部名/出力名: 現況写真台帳</span>
+      <span class="badge ${imgCount?'badge-ok':'badge-warn'}">画像 ${imgCount}枚</span>
+      <span class="badge ${replaced?'badge-ok':'badge-info'}">差し替え ${replaced}/${imgCount}枚</span>
+    </div>
+    <div class="alert alert-info">
+      Phase 1では、Excelに貼り付いている画像をサムネイル表示し、1枚ずつ同じ位置への差し替え予定画像を登録します。
+      画像はドラッグ&ドロップ時に印刷向けサイズへ自動リサイズします。Excel出力への反映は次Phaseで実装します。
+    </div>
+    ${imageHtml}
+    ${renderPhotoLedgerCells(ledger)}
+  `;
+}
+
+function photoLedgerImageCard(img, i) {
+  const src = img.replacement?.dataUrl || img.dataUrl;
+  const pos = img.anchor?.from ? `行${img.anchor.from.row + 1} / 列${img.anchor.from.col + 1}` : '位置情報なし';
+  const repl = img.replacement ? `<div style="color:#2e7d32;font-weight:700">差し替え済み: ${esc(img.replacement.name)}</div>` : '';
+  return `
+    <div class="photo-ledger-thumb ${img.replaced?'replaced':''}">
+      <img src="${src}" alt="${esc(img.name)}" loading="lazy">
+      <div class="plt-meta">
+        <div class="plt-title">${esc(img.name || '画像')}</div>
+        <div>${esc(pos)}</div>
+        <div>${esc(img.mediaPath || '')}</div>
+        ${repl}
+        <div class="drop-replace"
+          onclick="document.getElementById('pl-replace-${i}').click()"
+          ondragover="event.preventDefault();this.classList.add('dragover')"
+          ondragleave="this.classList.remove('dragover')"
+          ondrop="handlePhotoLedgerDrop(event, ${i})">
+          ここに新写真をドロップ<br>またはクリック
+          <input id="pl-replace-${i}" type="file" accept="image/*" style="display:none"
+            onchange="replacePhotoLedgerImage(${i}, this.files[0]); this.value=''">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderPhotoLedgerCells(ledger) {
+  const rows = ledger.cells || [];
+  if (!rows.length) return '';
+  const maxCols = Math.min(18, Math.max(...rows.map(r => r.length), 1));
+  const maxRows = Math.min(80, rows.length);
+  let html = '<div style="margin-top:16px"><h3 style="font-size:13px;color:#1e3a5f;margin-bottom:8px">セル内容の編集</h3>';
+  html += '<div class="photo-ledger-cells"><table><thead><tr><th></th>';
+  for (let c = 0; c < maxCols; c++) html += `<th>${String.fromCharCode(65 + c)}</th>`;
+  html += '</tr></thead><tbody>';
+  for (let r = 0; r < maxRows; r++) {
+    html += `<tr><th>${r + 1}</th>`;
+    for (let c = 0; c < maxCols; c++) {
+      const val = rows[r]?.[c] || '';
+      html += `<td><input type="text" value="${esc(val)}"
+        oninput="setPhotoLedgerCell(${r}, ${c}, this.value)"></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  if (rows.length > maxRows) html += `<div style="font-size:11px;color:#888;margin-top:6px">表示は先頭${maxRows}行までです（データは保持）。</div>`;
+  html += '</div>';
+  return html;
+}
+
+function setPhotoLedgerCell(r, c, value) {
+  const ledger = bridges[selBridge]?.photoLedger;
+  if (!ledger) return;
+  while (ledger.cells.length <= r) ledger.cells.push([]);
+  while (ledger.cells[r].length <= c) ledger.cells[r].push('');
+  ledger.cells[r][c] = value;
+}
+
+function handlePhotoLedgerDrop(e, i) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  const file = e.dataTransfer.files?.[0];
+  replacePhotoLedgerImage(i, file);
+}
+
+async function replacePhotoLedgerImage(i, file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const ledger = bridges[selBridge]?.photoLedger;
+  const img = ledger?.images?.[i];
+  if (!img) return;
+  try {
+    const resized = await resizeImageForExcel(file);
+    img.replacement = resized;
+    img.replaced = true;
+    renderPhotoLedgerEditor(bridges[selBridge]);
+    showToast(`📷 ${img.name} を差し替えました`, 'success');
+  } catch (e) {
+    showToast(`❌ 画像差し替え失敗: ${e.message}`, 'error', 5000);
+  }
+}
+
+function resizeImageForExcel(file, maxLongSide=1800, quality=0.86) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('画像ファイルを読めませんでした'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('画像として読み込めませんでした'));
+      img.onload = () => {
+        const scale = Math.min(1, maxLongSide / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        const mime = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+        const dataUrl = canvas.toDataURL(mime, mime === 'image/jpeg' ? quality : undefined);
+        resolve({ name: file.name, type: mime, dataUrl, width: w, height: h, originalSize: file.size });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function renderDamageTable(b) {
@@ -3424,6 +3730,17 @@ function bridgePayload(bridge) {
   b.photos = (b.photos || []).map(p => ({
     name: p.name, cam: p.cam, pNo: p.pNo
   }));
+  if (b.photoLedger) {
+    b.photoLedger = {
+      sourceSheetName: b.photoLedger.sourceSheetName,
+      normalizedSheetName: b.photoLedger.normalizedSheetName,
+      cells: b.photoLedger.cells,
+      images: (b.photoLedger.images || []).map(img => ({
+        id: img.id, name: img.name, mediaPath: img.mediaPath, contentType: img.contentType,
+        ext: img.ext, anchor: img.anchor, replaced: !!img.replaced, replacementName: img.replacement?.name || null
+      }))
+    };
+  }
   delete b._approvals;
   return b;
 }
