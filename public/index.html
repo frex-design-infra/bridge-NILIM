@@ -119,6 +119,8 @@ td.notes-col input { text-align: left; }
 /* 現況写真台帳（Excel埋め込み画像） */
 .photo-ledger-summary { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:12px; font-size:12px; color:#555; }
 .photo-ledger-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:12px; margin:12px 0 18px; }
+.photo-ledger-section-title { font-size:13px; color:#1e3a5f; margin:14px 0 8px; display:flex; align-items:center; gap:8px; }
+.photo-ledger-section-title::before { content:''; width:4px; height:14px; border-radius:2px; background:#5dade2; display:inline-block; }
 .photo-ledger-thumb { border:1px solid #dce0e8; border-radius:8px; overflow:hidden; background:#fafbfc; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
 .photo-ledger-thumb.replaced { border-color:#2e7d32; background:#f0fbf4; }
 .photo-ledger-thumb img { width:100%; aspect-ratio:4/3; object-fit:contain; background:#f5f6fa; display:block; }
@@ -2094,13 +2096,11 @@ function renderPhotoLedgerEditor(b) {
   const imgCount = ledger.images?.length || 0;
   const blockCount = ledger.blocks?.length || 0;
   const replaced = (ledger.images || []).filter(img => img.replaced).length;
-  const blockHtml = blockCount ? renderPhotoLedgerBlocks(ledger) : (imgCount ? `
-    <div class="photo-ledger-grid">
-      ${ledger.images.map((img, i) => photoLedgerImageCard(img, i)).join('')}
-    </div>` : `<div class="alert alert-warn">
+  const blockHtml = blockCount ? renderPhotoLedgerBlocks(ledger) : '';
+  const rawImageHtml = imgCount ? renderPhotoLedgerRawImages(ledger, blockCount > 0) : `<div class="alert alert-warn">
       シートは読み込み済みですが、埋め込み画像は検出できませんでした。
       ${ledger.extractError ? `<br>詳細: ${esc(ledger.extractError)}` : ''}
-    </div>`);
+    </div>`;
 
   el.innerHTML = `
     <div class="photo-ledger-summary">
@@ -2116,6 +2116,7 @@ function renderPhotoLedgerEditor(b) {
       新写真は各ブロックへドラッグ&ドロップすると印刷向けサイズへ自動リサイズし、元画像アンカー位置を保持します。
     </div>
     ${blockHtml}
+    ${rawImageHtml}
     ${renderPhotoLedgerCells(ledger)}
   `;
 }
@@ -2124,6 +2125,17 @@ function renderPhotoLedgerBlocks(ledger) {
   return `<div class="photo-ledger-blocks">
     ${ledger.blocks.map((block, i) => photoLedgerBlockCard(ledger, block, i)).join('')}
   </div>`;
+}
+
+function renderPhotoLedgerRawImages(ledger, hasBlocks=false) {
+  const images = ledger.images || [];
+  const missingData = images.filter(img => !(img.replacement?.dataUrl || img.dataUrl)).length;
+  return `
+    ${hasBlocks ? '<h3 class="photo-ledger-section-title">抽出画像一覧（確認用・全件表示）</h3>' : ''}
+    ${missingData ? `<div class="alert alert-warn">画像メタ情報はありますが、サムネイル本体が保存されていない画像が ${missingData} 枚あります。クラウド保存後の再読込では画像dataは保持しないため、元Excelを再インポートしてください。</div>` : ''}
+    <div class="photo-ledger-grid">
+      ${images.map((img, i) => photoLedgerImageCard(img, i)).join('')}
+    </div>`;
 }
 
 function photoLedgerBlockCard(ledger, block, blockIndex) {
@@ -2171,12 +2183,13 @@ function renderPhotoLedgerBlockField(blockIndex, field, value) {
 }
 
 function photoLedgerImageCard(img, i) {
-  const src = img.replacement?.dataUrl || img.dataUrl;
+  const src = img.replacement?.dataUrl || img.dataUrl || '';
   const pos = img.anchor?.from ? `行${img.anchor.from.row + 1} / 列${img.anchor.from.col + 1}` : '位置情報なし';
   const repl = img.replacement ? `<div style="color:#2e7d32;font-weight:700">差し替え済み: ${esc(img.replacement.name)}</div>` : '';
+  const imgHtml = src ? `<img src="${src}" alt="${esc(img.name)}" loading="lazy">` : `<div style="aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;padding:10px;color:#999;text-align:center;background:#f5f6fa">サムネイル本体なし<br>再インポートが必要</div>`;
   return `
     <div class="photo-ledger-thumb ${img.replaced?'replaced':''}">
-      <img src="${src}" alt="${esc(img.name)}" loading="lazy">
+      ${imgHtml}
       <div class="plt-meta">
         <div class="plt-title">${esc(img.name || '画像')}</div>
         <div>${esc(pos)}</div>
