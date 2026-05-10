@@ -124,8 +124,22 @@ td.notes-col input { text-align: left; }
 .photo-ledger-thumb img { width:100%; aspect-ratio:4/3; object-fit:contain; background:#f5f6fa; display:block; }
 .photo-ledger-thumb .plt-meta { padding:8px; font-size:11px; color:#666; line-height:1.5; }
 .photo-ledger-thumb .plt-title { font-weight:700; color:#1e3a5f; margin-bottom:4px; }
-.photo-ledger-thumb .drop-replace { margin-top:7px; border:1px dashed #b8c2d2; border-radius:6px; padding:8px; text-align:center; cursor:pointer; color:#777; background:white; }
-.photo-ledger-thumb .drop-replace:hover, .photo-ledger-thumb .drop-replace.dragover { background:#eef7fd; border-color:#5dade2; color:#1e3a5f; }
+.drop-replace { margin-top:7px; border:1px dashed #b8c2d2; border-radius:6px; padding:8px; text-align:center; cursor:pointer; color:#777; background:white; }
+.drop-replace:hover, .drop-replace.dragover { background:#eef7fd; border-color:#5dade2; color:#1e3a5f; }
+.photo-ledger-blocks { display:grid; grid-template-columns:repeat(auto-fill, minmax(310px, 1fr)); gap:14px; margin:12px 0 18px; }
+.photo-ledger-block { border:1px solid #d8e0ec; border-radius:10px; background:#fff; box-shadow:0 2px 8px rgba(30,58,95,0.08); overflow:hidden; }
+.photo-ledger-block.replaced { border-color:#2e7d32; box-shadow:0 2px 10px rgba(46,125,50,0.14); }
+.photo-ledger-block-head { display:flex; justify-content:space-between; align-items:center; gap:8px; padding:9px 11px; background:#f4f7fb; border-bottom:1px solid #e1e7f0; }
+.photo-ledger-block-title { font-weight:700; color:#1e3a5f; font-size:13px; }
+.photo-ledger-block-pos { font-size:10px; color:#778; white-space:nowrap; }
+.photo-ledger-block-body { display:grid; grid-template-columns:128px 1fr; gap:10px; padding:10px; }
+.photo-ledger-block-img { width:128px; min-height:96px; border:1px solid #dce0e8; border-radius:7px; background:#f5f6fa; display:flex; align-items:center; justify-content:center; overflow:hidden; color:#999; font-size:11px; text-align:center; }
+.photo-ledger-block-img img { width:100%; height:100%; min-height:96px; object-fit:contain; display:block; }
+.photo-ledger-fields { display:grid; gap:7px; }
+.photo-ledger-field label { display:block; font-size:10px; color:#667; margin-bottom:2px; }
+.photo-ledger-field input, .photo-ledger-field textarea { width:100%; border:1px solid #cfd8e6; border-radius:5px; padding:5px 6px; font-size:12px; font-family:inherit; background:#fff; }
+.photo-ledger-field textarea { min-height:48px; resize:vertical; line-height:1.4; }
+.photo-ledger-block-foot { padding:0 10px 10px; font-size:11px; color:#667; }
 .photo-ledger-cells { max-height:420px; overflow:auto; border:1px solid #dce0e8; border-radius:6px; }
 .photo-ledger-cells table { min-width:900px; }
 .photo-ledger-cells th { position:sticky; top:0; z-index:1; }
@@ -1818,9 +1832,16 @@ function deleteRepairRow(i) {
 // 現況写真台帳（現状写真台帳/現況写真台帳の正規化・画像抽出・差し替え）
 // ============================================================
 const PHOTO_LEDGER_SHEET_CANDIDATES = ['現況写真台帳', '現状写真台帳'];
+const PHOTO_LEDGER_NORMALIZED_NAME = '現況写真台帳';
+const PHOTO_LEDGER_FIELDS = [
+  { key:'photoNumber', label:'写真番号', defaultOffset:0 },
+  { key:'spanNumber',  label:'径間番号', defaultOffset:1 },
+  { key:'description', label:'写真説明', defaultOffset:2, textarea:true },
+  { key:'memo',        label:'メモ',     defaultOffset:3, textarea:true },
+];
 
 async function attachExcelPhotoLedger(bridge, wb, arrayBuffer) {
-  const sourceSheetName = PHOTO_LEDGER_SHEET_CANDIDATES.find(sn => wb.Sheets[sn]);
+  const sourceSheetName = findWorkbookSheetName(wb, PHOTO_LEDGER_SHEET_CANDIDATES);
   if (!sourceSheetName) {
     bridge.photoLedger = null;
     return;
@@ -1830,9 +1851,11 @@ async function attachExcelPhotoLedger(bridge, wb, arrayBuffer) {
   const cells = s2a(ws).map(row => (row || []).map(v => v == null ? '' : String(v)));
   bridge.photoLedger = {
     sourceSheetName,
-    normalizedSheetName: '現況写真台帳',
+    normalizedSheetName: PHOTO_LEDGER_NORMALIZED_NAME,
     cells,
     images: [],
+    blocks: [],
+    layout: null,
     note: '出力時は「現況写真台帳」シートとして template.xlsx に載せる予定'
   };
 
@@ -1842,6 +1865,12 @@ async function attachExcelPhotoLedger(bridge, wb, arrayBuffer) {
     console.warn('[photoLedger] image extract failed:', e);
     bridge.photoLedger.extractError = e.message || String(e);
   }
+  rebuildPhotoLedgerBlocks(bridge.photoLedger);
+}
+
+function findWorkbookSheetName(wb, candidates) {
+  const names = wb.SheetNames || Object.keys(wb.Sheets || {});
+  return names.find(name => candidates.includes(String(name).trim())) || null;
 }
 
 async function extractSheetImagesFromXlsx(arrayBuffer, sheetName) {
@@ -1870,7 +1899,7 @@ async function extractSheetImagesFromXlsx(arrayBuffer, sheetName) {
   if (!workbookXml || !workbookRels) return [];
 
   const sheets = Array.from(workbookXml.getElementsByTagName('sheet'));
-  const sheetNode = sheets.find(n => n.getAttribute('name') === sheetName);
+  const sheetNode = sheets.find(n => String(n.getAttribute('name') || '').trim() === String(sheetName).trim());
   if (!sheetNode) return [];
   const rid = sheetNode.getAttribute('r:id') || sheetNode.getAttribute('id');
   if (!rid) return [];
@@ -1945,11 +1974,109 @@ async function extractSheetImagesFromXlsx(arrayBuffer, sheetName) {
       contentType: mime,
       dataUrl: `data:${mime};base64,${bytes}`,
       anchor: { from: readPos(anchor, 'from'), to: readPos(anchor, 'to') },
+      blockIndex: null,
       replaced: false,
       replacement: null
     });
   }
-  return images;
+  return images.sort((a, b) => ((a.anchor?.from?.row ?? 9999) - (b.anchor?.from?.row ?? 9999)) || ((a.anchor?.from?.col ?? 9999) - (b.anchor?.from?.col ?? 9999)));
+}
+
+function rebuildPhotoLedgerBlocks(ledger) {
+  if (!ledger) return;
+  ledger.layout = detectPhotoLedgerLayout(ledger);
+  ledger.blocks = buildPhotoLedgerBlocks(ledger);
+}
+
+function detectPhotoLedgerLayout(ledger) {
+  const cells = ledger.cells || [];
+  const images = ledger.images || [];
+  const labelHits = [];
+  for (let r = 0; r < Math.min(cells.length, 220); r++) {
+    for (let c = 0; c < Math.min((cells[r] || []).length, 12); c++) {
+      const v = String(cells[r]?.[c] || '').replace(/\s/g, '');
+      if (v.includes('写真番号') || v.includes('径間番号') || v.includes('写真説明') || v === 'メモ') {
+        labelHits.push({ r, c, v });
+      }
+    }
+  }
+  const avgLabelCol = labelHits.length ? labelHits.reduce((sum, x) => sum + x.c, 0) / labelHits.length : null;
+  const imgCols = images.map(img => img.anchor?.from?.col).filter(v => Number.isFinite(v));
+  const minImgCol = imgCols.length ? Math.min(...imgCols) : null;
+  const type = (avgLabelCol != null && avgLabelCol >= 6) || (avgLabelCol == null && minImgCol != null && minImgCol >= 1) ? 'B:H' : 'A:G';
+  return type === 'B:H'
+    ? { type, baseCol:1, photoStartCol:1, photoEndCol:5, labelCol:6, valueCol:7 }
+    : { type, baseCol:0, photoStartCol:0, photoEndCol:4, labelCol:5, valueCol:6 };
+}
+
+function buildPhotoLedgerBlocks(ledger) {
+  const cells = ledger.cells || [];
+  const images = ledger.images || [];
+  const layout = ledger.layout || detectPhotoLedgerLayout(ledger);
+  const maxCellRow = cells.length;
+  const maxImageRow = Math.max(0, ...images.map(img => (img.anchor?.from?.row ?? 0) + 1));
+  const maxRow = Math.max(maxCellRow, maxImageRow, 23);
+  const starts = [];
+  for (let pageStart = 0; pageStart < maxRow + 23; pageStart += 23) {
+    [2, 9, 16].forEach(offset => starts.push(pageStart + offset));
+  }
+
+  const nearestStart = row => starts.reduce((best, st) => Math.abs(st - row) < Math.abs(best - row) ? st : best, starts[0]);
+  const imagesByStart = new Map();
+  images.forEach((img, imageIndex) => {
+    const from = img.anchor?.from;
+    const start = nearestStart(from?.row ?? imageIndex * 7 + 2);
+    img.blockIndex = starts.indexOf(start);
+    if (!imagesByStart.has(start)) imagesByStart.set(start, []);
+    imagesByStart.get(start).push({ img, imageIndex });
+  });
+
+  const blocks = [];
+  starts.forEach(startRow => {
+    const fieldInfo = readPhotoLedgerBlockFields(cells, layout, startRow);
+    const imagePack = (imagesByStart.get(startRow) || [])[0] || null;
+    const hasFieldValue = PHOTO_LEDGER_FIELDS.some(f => fieldInfo.values[f.key]);
+    const hasLabels = Object.values(fieldInfo.refs).some(ref => !ref.inferred);
+    if (!imagePack && !hasFieldValue && !hasLabels) return;
+    const block = {
+      id: `plblock_${blocks.length + 1}`,
+      index: blocks.length + 1,
+      rowStart: startRow,
+      rowEnd: startRow + 6,
+      layoutType: layout.type,
+      imageIndex: imagePack?.imageIndex ?? null,
+      imageId: imagePack?.img?.id || null,
+      fields: fieldInfo.values,
+      refs: fieldInfo.refs,
+      anchor: imagePack?.img?.anchor || null,
+      unmatchedImages: Math.max(0, (imagesByStart.get(startRow) || []).length - 1)
+    };
+    blocks.push(block);
+  });
+  return blocks;
+}
+
+function readPhotoLedgerBlockFields(cells, layout, startRow) {
+  const values = { photoNumber:'', spanNumber:'', description:'', memo:'' };
+  const refs = {};
+  const normalized = str => String(str || '').replace(/[\s　:：]/g, '');
+  for (let r = startRow; r <= startRow + 6; r++) {
+    const label = normalized(cells[r]?.[layout.labelCol]);
+    if (!label) continue;
+    const value = String(cells[r]?.[layout.valueCol] || '');
+    const field = PHOTO_LEDGER_FIELDS.find(f => label.includes(normalized(f.label)) || normalized(f.label).includes(label));
+    if (!field || refs[field.key]) continue;
+    values[field.key] = value;
+    refs[field.key] = { labelRow:r, labelCol:layout.labelCol, valueRow:r, valueCol:layout.valueCol };
+  }
+  PHOTO_LEDGER_FIELDS.forEach(field => {
+    if (!refs[field.key]) {
+      const r = startRow + field.defaultOffset;
+      refs[field.key] = { labelRow:r, labelCol:layout.labelCol, valueRow:r, valueCol:layout.valueCol, inferred:true };
+      if (!values[field.key]) values[field.key] = String(cells[r]?.[layout.valueCol] || '');
+    }
+  });
+  return { values, refs };
 }
 
 function renderPhotoLedgerEditor(b) {
@@ -1962,31 +2089,85 @@ function renderPhotoLedgerEditor(b) {
     </div>`;
     return;
   }
+  if (!ledger.layout || !ledger.blocks) rebuildPhotoLedgerBlocks(ledger);
 
   const imgCount = ledger.images?.length || 0;
+  const blockCount = ledger.blocks?.length || 0;
   const replaced = (ledger.images || []).filter(img => img.replaced).length;
-  const imageHtml = imgCount ? `
+  const blockHtml = blockCount ? renderPhotoLedgerBlocks(ledger) : (imgCount ? `
     <div class="photo-ledger-grid">
       ${ledger.images.map((img, i) => photoLedgerImageCard(img, i)).join('')}
     </div>` : `<div class="alert alert-warn">
       シートは読み込み済みですが、埋め込み画像は検出できませんでした。
       ${ledger.extractError ? `<br>詳細: ${esc(ledger.extractError)}` : ''}
-    </div>`;
+    </div>`);
 
   el.innerHTML = `
     <div class="photo-ledger-summary">
       <span class="badge badge-info">入力: ${esc(ledger.sourceSheetName)}</span>
       <span class="badge badge-ok">内部名/出力名: 現況写真台帳</span>
+      <span class="badge badge-info">レイアウト: ${esc(ledger.layout?.type || '未判定')}</span>
+      <span class="badge ${blockCount?'badge-ok':'badge-warn'}">ブロック ${blockCount}件</span>
       <span class="badge ${imgCount?'badge-ok':'badge-warn'}">画像 ${imgCount}枚</span>
       <span class="badge ${replaced?'badge-ok':'badge-info'}">差し替え ${replaced}/${imgCount}枚</span>
     </div>
     <div class="alert alert-info">
-      Phase 1では、Excelに貼り付いている画像をサムネイル表示し、1枚ずつ同じ位置への差し替え予定画像を登録します。
-      画像はドラッグ&ドロップ時に印刷向けサイズへ自動リサイズします。Excel出力への反映は次Phaseで実装します。
+      写真台帳を1写真=1ブロックとして解析しました。写真番号・径間番号・写真説明・メモをここで編集できます。
+      新写真は各ブロックへドラッグ&ドロップすると印刷向けサイズへ自動リサイズし、元画像アンカー位置を保持します。
     </div>
-    ${imageHtml}
+    ${blockHtml}
     ${renderPhotoLedgerCells(ledger)}
   `;
+}
+
+function renderPhotoLedgerBlocks(ledger) {
+  return `<div class="photo-ledger-blocks">
+    ${ledger.blocks.map((block, i) => photoLedgerBlockCard(ledger, block, i)).join('')}
+  </div>`;
+}
+
+function photoLedgerBlockCard(ledger, block, blockIndex) {
+  const img = block.imageIndex != null ? ledger.images?.[block.imageIndex] : null;
+  const src = img?.replacement?.dataUrl || img?.dataUrl || '';
+  const pos = img?.anchor?.from ? `行${img.anchor.from.row + 1} / 列${img.anchor.from.col + 1}` : `行${block.rowStart + 1}〜${block.rowEnd + 1}`;
+  const repl = img?.replacement ? `<div style="color:#2e7d32;font-weight:700;margin-top:4px">差し替え済み: ${esc(img.replacement.name)}</div>` : '';
+  return `
+    <div class="photo-ledger-block ${img?.replaced?'replaced':''}">
+      <div class="photo-ledger-block-head">
+        <div class="photo-ledger-block-title">写真ブロック ${block.index}</div>
+        <div class="photo-ledger-block-pos">${esc(pos)} / ${esc(block.layoutType)}</div>
+      </div>
+      <div class="photo-ledger-block-body">
+        <div>
+          <div class="photo-ledger-block-img">${src ? `<img src="${src}" alt="${esc(img.name)}" loading="lazy">` : '画像なし<br>セル情報のみ'}</div>
+          <div class="drop-replace"
+            onclick="document.getElementById('pl-block-replace-${blockIndex}').click()"
+            ondragover="event.preventDefault();this.classList.add('dragover')"
+            ondragleave="this.classList.remove('dragover')"
+            ondrop="handlePhotoLedgerBlockDrop(event, ${blockIndex})">
+            新写真をドロップ<br>またはクリック
+            <input id="pl-block-replace-${blockIndex}" type="file" accept="image/*" style="display:none"
+              onchange="replacePhotoLedgerBlockImage(${blockIndex}, this.files[0]); this.value=''">
+          </div>
+          ${repl}
+        </div>
+        <div class="photo-ledger-fields">
+          ${PHOTO_LEDGER_FIELDS.map(field => renderPhotoLedgerBlockField(blockIndex, field, block.fields?.[field.key] || '')).join('')}
+        </div>
+      </div>
+      <div class="photo-ledger-block-foot">
+        ${img ? `${esc(img.name || '画像')} / ${esc(img.mediaPath || '')}` : '画像アンカー未検出'}
+        ${block.unmatchedImages ? `<br><span style="color:#bf360c">同じブロック付近に追加画像 ${block.unmatchedImages}枚</span>` : ''}
+      </div>
+    </div>`;
+}
+
+function renderPhotoLedgerBlockField(blockIndex, field, value) {
+  const common = `oninput="setPhotoLedgerBlockField(${blockIndex}, '${field.key}', this.value)"`;
+  if (field.textarea) {
+    return `<div class="photo-ledger-field"><label>${esc(field.label)}</label><textarea ${common}>${esc(value)}</textarea></div>`;
+  }
+  return `<div class="photo-ledger-field"><label>${esc(field.label)}</label><input type="text" value="${esc(value)}" ${common}></div>`;
 }
 
 function photoLedgerImageCard(img, i) {
@@ -2044,6 +2225,20 @@ function setPhotoLedgerCell(r, c, value) {
   while (ledger.cells.length <= r) ledger.cells.push([]);
   while (ledger.cells[r].length <= c) ledger.cells[r].push('');
   ledger.cells[r][c] = value;
+  rebuildPhotoLedgerBlocks(ledger);
+}
+
+function setPhotoLedgerBlockField(blockIndex, key, value) {
+  const ledger = bridges[selBridge]?.photoLedger;
+  const block = ledger?.blocks?.[blockIndex];
+  if (!ledger || !block) return;
+  block.fields[key] = value;
+  const ref = block.refs?.[key];
+  if (ref) {
+    while (ledger.cells.length <= ref.valueRow) ledger.cells.push([]);
+    while (ledger.cells[ref.valueRow].length <= ref.valueCol) ledger.cells[ref.valueRow].push('');
+    ledger.cells[ref.valueRow][ref.valueCol] = value;
+  }
 }
 
 function handlePhotoLedgerDrop(e, i) {
@@ -2051,6 +2246,23 @@ function handlePhotoLedgerDrop(e, i) {
   e.currentTarget.classList.remove('dragover');
   const file = e.dataTransfer.files?.[0];
   replacePhotoLedgerImage(i, file);
+}
+
+function handlePhotoLedgerBlockDrop(e, blockIndex) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('dragover');
+  const file = e.dataTransfer.files?.[0];
+  replacePhotoLedgerBlockImage(blockIndex, file);
+}
+
+async function replacePhotoLedgerBlockImage(blockIndex, file) {
+  const ledger = bridges[selBridge]?.photoLedger;
+  const block = ledger?.blocks?.[blockIndex];
+  if (!block || block.imageIndex == null) {
+    showToast('❌ 差し替え対象の元画像がありません', 'error', 4000);
+    return;
+  }
+  await replacePhotoLedgerImage(block.imageIndex, file);
 }
 
 async function replacePhotoLedgerImage(i, file) {
@@ -2062,6 +2274,7 @@ async function replacePhotoLedgerImage(i, file) {
     const resized = await resizeImageForExcel(file);
     img.replacement = resized;
     img.replaced = true;
+    rebuildPhotoLedgerBlocks(ledger);
     renderPhotoLedgerEditor(bridges[selBridge]);
     showToast(`📷 ${img.name} を差し替えました`, 'success');
   } catch (e) {
@@ -3735,9 +3948,15 @@ function bridgePayload(bridge) {
       sourceSheetName: b.photoLedger.sourceSheetName,
       normalizedSheetName: b.photoLedger.normalizedSheetName,
       cells: b.photoLedger.cells,
+      layout: b.photoLedger.layout,
+      blocks: (b.photoLedger.blocks || []).map(block => ({
+        id: block.id, index: block.index, rowStart: block.rowStart, rowEnd: block.rowEnd,
+        layoutType: block.layoutType, imageIndex: block.imageIndex, imageId: block.imageId,
+        fields: block.fields, refs: block.refs, anchor: block.anchor
+      })),
       images: (b.photoLedger.images || []).map(img => ({
         id: img.id, name: img.name, mediaPath: img.mediaPath, contentType: img.contentType,
-        ext: img.ext, anchor: img.anchor, replaced: !!img.replaced, replacementName: img.replacement?.name || null
+        ext: img.ext, anchor: img.anchor, blockIndex: img.blockIndex, replaced: !!img.replaced, replacementName: img.replacement?.name || null
       }))
     };
   }
